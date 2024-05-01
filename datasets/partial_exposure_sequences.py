@@ -1,18 +1,13 @@
 """
-Use the pretrained transformer to generalize in the partial exposure paradigm.
+Generate partial exposure sequences as described in Chan et al (2022).
+
+TODO: these are now embedded as gaussians but it would be better to pass
+the raw data to the input embedder and let it do the embedding.
 """
 
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import wandb
 import numpy as np
-from torch.utils.data import Dataset, DataLoader, IterableDataset
 import random
-
-from chan_replication.datasets import get_mus_label_class, generate_targets_only
-from chan_replication.config import config
-from reddy_replication_torch.model import Transformer
 
 
 def get_partial_exposure_sequence(config, mus_label):
@@ -75,40 +70,3 @@ def exemplar_strategy(stim, labels, query):
     max_label = labels[max_similar]
     return max_label
 
-
-
-if __name__ == '__main__':
-    import matplotlib.pyplot as plt
-
-    config.model.out_dim = config.data.L
-    model = Transformer(config=config.model)
-    model.load_state_dict(torch.load('./models/fewshot_pretrained.pth'))
-    model.eval()
-
-    with torch.no_grad():
-        predicted_labels = []
-        exemplar_strat = []
-        for i in range(1000):
-            mus_label, _, _ = get_mus_label_class(config.data.K + 3, config.data.L, config.data.D)
-            inputs, input_names, input_labels = get_partial_exposure_sequence(config, mus_label)
-            inputs = torch.Tensor(inputs).float()
-
-            pred, out_dict = model(inputs, save_weights=True)
-            probs = torch.softmax(pred, dim=-1)
-            exemplar_pred = exemplar_strategy(inputs[0, :-1:2], input_labels, inputs[0, -1, :])
-            plt.bar(range(3), probs.detach().numpy().squeeze())
-
-            predicted_label = torch.argmax(pred[-1, :config.data.L])
-            predicted_labels.append(predicted_label.item())
-
-            exemplar_strat.append(predicted_label.item() == exemplar_pred)
-
-            # plot the attention weights
-            # fig, ax = plt.subplots(1, 2)
-            # ax[0].imshow(out_dict['block_0']['weights'].squeeze())
-            # ax[1].imshow(out_dict['block_1']['weights'].squeeze())
-            # ax[0].set_title('Block 0')
-            # ax[1].set_title('Block 1')
-            plt.close()
-
-    plt.hist(range(2), predicted_labels)

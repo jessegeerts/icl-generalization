@@ -4,17 +4,17 @@ the classes and the labels just by generating gaussian samples, much like Reddy.
 """
 
 import torch
-from torch.utils.data import Dataset, DataLoader, IterableDataset
+from torch.utils.data import DataLoader, IterableDataset
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import wandb
 
-from chan_replication.config import config
-from chan_replication.datasets import get_mus_label_class
-from chan_replication.partial_exposure_sequences import get_partial_exposure_sequence, exemplar_strategy
-from experiments.chan_replication.data_generators import CompoundDataset, SymbolicDatasetForSampling, SeqGenerator
-from reddy_replication_torch.model import Transformer
+from configs.fewshot_config import config
+from datasets.gauss_datasets import get_mus_label_class
+from datasets.partial_exposure_sequences import get_partial_exposure_sequence, exemplar_strategy
+from datasets.data_generators import SymbolicDatasetForSampling, SeqGenerator
+from models import Transformer
 from definitions import WANDB_KEY, ATTENTION_CMAP
 
 
@@ -111,9 +111,9 @@ if __name__ == '__main__':
     )
     config.model.out_dim = config.data.L
     print(experiment_name)
-    if config.log_to_wandb:
+    if config.log.log_to_wandb:
         wandb.login(key=WANDB_KEY)
-        wandb.init(project="RuleExemplar", name=experiment_name, config=config)
+        wandb.init(project=config.log.wandb_project, name=experiment_name, config=config)
 
 
     # prepare data
@@ -157,7 +157,7 @@ if __name__ == '__main__':
         loss.backward()
         optimizer.step()
 
-        if n % config.logging_interval == 0:
+        if n % config.log.logging_interval == 0:
             print(f'iteration {n}, loss {loss}')
             wandb.log({'loss': loss.item(), 'iter': n})
 
@@ -213,7 +213,7 @@ if __name__ == '__main__':
     ax.set_ylim([0, 1])
     plt.gca().set_aspect('equal', adjustable='box')
     plt.savefig('mod_preds.png')
-    if config.log_to_wandb:
+    if config.log.log_to_wandb:
         wandb.log({'mod_preds': fig})
         wandb.log({'model_preds': mod_preds, 'exemplar_preds': exemplar_preds})
     # save the model
