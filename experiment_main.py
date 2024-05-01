@@ -145,6 +145,17 @@ if __name__ == '__main__':
                 wandb.log({'l1_attn_map_icl': fig2, 'iter': n})
                 plt.close('all')
 
+            # calculate the induction strength of each L2 head
+            # this is the difference in attention weights from the query to the correct keys - the incorrect keys
+
+            correct_ids = holdout_batch['label'][:, :-1] == holdout_batch['label'][:, -1].view(1,128).T
+            for h in range(config.model.n_heads):
+                attn_weights = out_dict[f'block_1']['weights'][:, h, :, :]
+                # only get every second column, starting from the second
+                query_to_label = attn_weights[:, -1, 1::2]
+                induction_strength = query_to_label[correct_ids].mean() - query_to_label[~correct_ids].mean()
+                wandb.log({f'induction_strength_head_{h}': induction_strength.item(), 'iter': n})
+
             if holdout_accuracy == 1.:
                 steps_above_criterion += 1
             else:
