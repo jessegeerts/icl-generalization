@@ -14,6 +14,7 @@ from configs.fewshot_config import config
 from datasets.gauss_datasets import get_mus_label_class
 from datasets.partial_exposure_sequences import get_partial_exposure_sequence, exemplar_strategy
 from datasets.data_generators import SymbolicDatasetForSampling, SeqGenerator
+from input_embedders import GaussianEmbedder
 from models import Transformer
 from definitions import WANDB_KEY, ATTENTION_CMAP
 
@@ -47,41 +48,6 @@ def eval_loss_and_accuracy(mod, inputs, labels, criterion):
     return loss, accuracy, out_dict
 
 
-def embed_stimuli_and_labels(batch, mus_label, mus_class, labels_class):
-    """Given a batch of symbolic examples and labels, embed these into the
-    input space of the transformer model. We choose Gaussian embeddings
-    for both the classes and the labels. We also add positional encoding
-    (with random shifts) to the inputs..
-    """
-    e_fac = 1 / np.sqrt(1 + config.data.eps ** 2)
-    Nmax = config.data.Nmax
-    N = config.seq.N
-    S = config.train.batch_size
-    D = config.data.D
-    L = config.data.L
-
-    examples = batch['example']
-    labels = batch['label']
-
-    inputs = torch.zeros((config.train.batch_size, 2*N+1, 2*Nmax + 1 + config.data.D))
-
-    # fill even indices with class examples
-    inputs[:, :-1:2, 2 * Nmax + 1:] = \
-    (e_fac * (mus_class[examples[:, :-1]] + config.data.eps * torch.Tensor(np.random.normal(size=(S, N, D))).double() / np.sqrt(D)))
-    # fill odd indices with label examples
-    inputs[:, 1:-1:2, 2 * Nmax + 1:] = mus_label[labels[:, :-1]]
-    # fill last index with target examples
-    inputs[:, -1, 2 * Nmax + 1:] = \
-    (e_fac * (mus_class[examples[:, -1]] + config.data.eps * np.random.normal(size=(S, D)) / np.sqrt(D)))
-
-    # add positional encoding (random shifts)
-    shifts = np.random.choice((2 * Nmax + 1) - (2 * N + 1) + 1, size=(S))
-    for s in range(S):
-        inputs[s, :, shifts[s]:shifts[s] + 2 * N + 1] = torch.Tensor(np.identity(2 * N + 1))
-
-    return inputs, labels[:, -1].long()
-
-
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     import os
@@ -92,7 +58,7 @@ if __name__ == '__main__':
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    experiment_name = 'Fewshot-I{}_K{}_N{}_L{}_D{}_a{}_B{}_pB{}_pC{}_eps{}_lr{}_drop{}_{}_ln{}_wDecay{}'.format(
+    experiment_name = 'Fewshot-I{}_K{}_N{}_L{}_D{}_a{}_B{}_pB{}_pC{}_eps{}_lr{}_drop{}_{}_ln{}_wDecay{}_hdim{}'.format(
         config.train.niters,
         config.data.K,
         config.seq.N,
@@ -107,7 +73,8 @@ if __name__ == '__main__':
         config.model.drop_p,
         'custom',
         config.model.apply_ln,
-        config.train.w_decay
+        config.train.w_decay,
+        config.model.h_dim
     )
     config.model.out_dim = config.data.L
     print(experiment_name)
@@ -136,7 +103,8 @@ if __name__ == '__main__':
     dataloader = DataLoader(iterdataset, batch_size=config.train.batch_size)
 
     # prepare model
-    model = Transformer(config=config.model).to(device)  # my custom transformer encoder
+    input_embedder = GaussianEmbedder(config)
+    model = Transformer(config=config.model, input_embedder=input_embedder).to(device)  # my custom transformer encoder
     optimizer = optim.Adam(model.parameters(), lr=config.train.learning_rate, weight_decay=config.train.w_decay)
     criterion = nn.CrossEntropyLoss()
 
@@ -147,13 +115,11 @@ if __name__ == '__main__':
         model.train()
         batch = next(iterator)
 
-        inputs_batch, labels_batch = embed_stimuli_and_labels(batch, mus_label, mus_class, labels_class)
-
         optimizer.zero_grad()
         # forward_pass_start = time.time()
-        y_hat, out_dict = model(inputs_batch)
+        y_hat, out_dict = model(batch)
 
-        loss = criterion(y_hat, labels_batch)
+        loss = criterion(y_hat, batch['label'][:, -1].long())
         loss.backward()
         optimizer.step()
 
@@ -165,8 +131,7 @@ if __name__ == '__main__':
             iterdataset.set_mode('holdout')
             model.eval()
             holdout_batch = next(iterator)
-            holdout_inputs_batch, holdout_labels_batch = embed_stimuli_and_labels(holdout_batch, mus_label, mus_class, labels_class)
-            holdout_loss, holdout_accuracy, out_dict = eval_loss_and_accuracy(model, holdout_inputs_batch, holdout_labels_batch, criterion)
+            holdout_loss, holdout_accuracy, out_dict = eval_loss_and_accuracy(model, holdout_batch, holdout_batch['label'][:, -1].long(), criterion)
             print(f'holdout loss: {holdout_loss}, holdout accuracy: {holdout_accuracy}')
             wandb.log({'holdout_loss': holdout_loss.item(), 'holdout_accuracy': holdout_accuracy.item(), 'iter': n})
 
@@ -197,7 +162,7 @@ if __name__ == '__main__':
         for i in range(1000):
             inputs, input_names, input_labels = get_partial_exposure_sequence(config, mus_label)
             inputs = torch.Tensor(inputs).float()
-            pred, out_dict = model(inputs, save_weights=True)
+            pred, out_dict = model(inputs, save_weights=True, apply_embedder=False)
             probs = torch.softmax(pred, dim=-1)
             exemplar_pred = exemplar_strategy(inputs[0, :-1:2], input_labels, inputs[0, -1, :])
             mod_preds.append(torch.argmax(pred).item())

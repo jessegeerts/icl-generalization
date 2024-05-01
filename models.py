@@ -126,7 +126,7 @@ class Block(nn.Module):
 
 class Transformer(nn.Module):
     def __init__(self, n_blocks=None, h_dim=None, max_T=None, n_heads=None, drop_p=None,
-                 widening_factor=4, config=None, out_dim=None, include_mlp=True, apply_ln=False):
+                 widening_factor=4, config=None, out_dim=None, include_mlp=True, apply_ln=False, input_embedder=None):
         super().__init__()
 
         if config:
@@ -142,7 +142,7 @@ class Transformer(nn.Module):
         elif None in [n_blocks, h_dim, max_T, n_heads, drop_p]:
             raise ValueError("Either provide a complete config or all hyperparameters individually.")
 
-        self.input_embedder = None  # for potential future use.
+        self.input_embedder = input_embedder
 
         # determine which blocks include an MLP classifier
         if include_mlp is True:
@@ -161,10 +161,10 @@ class Transformer(nn.Module):
         self.ln = nn.LayerNorm(h_dim)
         self.proj_head = nn.Linear(h_dim, out_dim)
 
-    def forward(self, x, save_weights=False):
+    def forward(self, x, save_weights=False, apply_embedder=True):
         out_dict = {}
         # embed inputs, if required
-        if self.input_embedder is None:
+        if self.input_embedder is None or not apply_embedder:
             h = x
         else:
             h = self.input_embedder(x)
