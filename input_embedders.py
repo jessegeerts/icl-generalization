@@ -19,11 +19,16 @@ class GaussianEmbedder(nn.Module):
         self.L = config.data.L
         self.S = config.train.batch_size
 
-        # use reddy's code to get mus_label, mus_class, labels_class
-        mus_label, mus_class, labels_class = get_mus_label_class(config.data.K+3, config.data.L, config.data.D)
-        self.mus_label = torch.Tensor(mus_label)
-        self.mus_class = torch.Tensor(mus_class)
-        self.labels_class = torch.Tensor(labels_class).int()
+        self.mus_label, self.mus_class, self.labels_class = self.get_mus_label_class(config.data.K, config.data.L, config.data.D)
+
+    def get_mus_label_class(self, K, L, D):
+        n_possible_labels = K
+        mus_label = torch.normal(0, 1, size=(n_possible_labels, D)) / np.sqrt(D)
+        mus_class = torch.normal(0, 1, size=(K, D)) / np.sqrt(D)
+        if K < L or K % L != 0:
+            raise ValueError("K >= L and K%L == 0 is required")
+        labels_class = torch.tile(torch.arange(L), (1, int(K / L))).squeeze().int()
+        return mus_label, mus_class, labels_class
 
     def forward(self, batch):
         examples = batch['example']

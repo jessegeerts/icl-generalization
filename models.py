@@ -7,6 +7,67 @@ from torch.nn import functional as F
 import math
 
 
+def get_sinusoidal_positional_embeddings_2(seq_len, d_model):
+    pe = torch.zeros(seq_len, d_model)
+    position = torch.arange(0, seq_len, dtype=torch.float).unsqueeze(1)
+    div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+    pe[:, 0::2] = torch.sin(position * div_term)
+    pe[:, 1::2] = torch.cos(position * div_term)
+    pe = pe.unsqueeze(0)
+    return pe
+
+
+def get_sinusoidal_positional_embeddings(n_pos, dim, time=10000.0):
+    # Create the denominator based on the dimension
+    denom = torch.pow(time, 2 * (torch.arange(dim) // 2).float() / dim)
+
+    # Create the positional encoding matrix
+    position_enc = torch.arange(n_pos).unsqueeze(1).float() / denom.unsqueeze(0)
+
+    # Apply the sine and cosine functions to the positional encoding matrix
+    position_enc = torch.cat([torch.sin(position_enc[:, 0::2]), torch.cos(position_enc[:, 1::2])], dim=-1)
+
+    return position_enc.unsqueeze(0)
+
+
+# todo: implement RoPE in the transformer
+def apply_rotary_pos_emb(q, k, cos, sin):
+    # Apply rotary position embedding to queries and keys
+    def rotate_half(x):
+        x1, x2 = x.chunk(2, dim=-1)
+        return torch.cat((-x2, x1), dim=-1)
+
+    q = (q * cos) + (rotate_half(q) * sin)
+    k = (k * cos) + (rotate_half(k) * sin)
+    return q, k
+
+
+def rotary_pos_emb(x):
+    seq_len = x.shape[1]
+    d = x.shape[-1] // 2
+    theta = torch.arange(d, device=x.device) / d * math.pi
+    seq_idx = torch.arange(seq_len, device=x.device)
+    cos = torch.cos(seq_idx[:, None] * theta)
+    sin = torch.sin(seq_idx[:, None] * theta)
+    return cos, sin
+
+
+def get_parity_embeddings(seq_len, emb_dim):
+    # Create an empty tensor of size (seq_len, emb_dim)
+    pe = torch.zeros(seq_len, emb_dim)
+
+    # For even indices, set the embedding to a vector of ones
+    pe[::2] = torch.ones(emb_dim)
+
+    # For odd indices, set the embedding to a vector of zeros
+    pe[1::2] = torch.zeros(emb_dim)
+
+    # Add an extra dimension to match the input size
+    pe = pe.unsqueeze(0)
+
+    return pe
+
+
 class MaskedCausalAttention(nn.Module):
     def __init__(self, h_dim, max_T, n_heads, drop_p):
         super().__init__()
@@ -126,12 +187,15 @@ class Block(nn.Module):
 
 class Transformer(nn.Module):
     def __init__(self, n_blocks=None, h_dim=None, max_T=None, n_heads=None, drop_p=None,
-                 widening_factor=4, config=None, out_dim=None, include_mlp=True, apply_ln=False, input_embedder=None):
+                 widening_factor=4, config=None, out_dim=None, include_mlp=True, apply_ln=False, input_embedder=None,
+                 emb_dim=0, pos_embed_type='parity', pos_emb_loc='add'):
         super().__init__()
 
         if config:
             n_blocks = config.n_blocks
             h_dim = config.h_dim
+            emb_dim = config.emb_dim
+            pos_dim = config.pos_dim
             max_T = config.max_T
             n_heads = config.n_heads
             drop_p = config.drop_p
@@ -139,10 +203,17 @@ class Transformer(nn.Module):
             out_dim = config.out_dim
             include_mlp = config.include_mlp
             apply_ln = config.apply_ln
+            pos_embed_type = config.pos_emb_type
+            pos_emb_loc = config.pos_emb_loc
         elif None in [n_blocks, h_dim, max_T, n_heads, drop_p]:
             raise ValueError("Either provide a complete config or all hyperparameters individually.")
 
         self.input_embedder = input_embedder
+
+        if pos_emb_loc == 'append' or pos_emb_loc == 'none':
+            h_dim = emb_dim + pos_dim
+        if pos_emb_loc == 'add' and emb_dim != h_dim:
+            raise ValueError("If pos_emb_loc is 'add', emb_dim must be equal to h_dim.")
 
         # determine which blocks include an MLP classifier
         if include_mlp is True:
@@ -160,6 +231,12 @@ class Transformer(nn.Module):
         # projection head
         self.ln = nn.LayerNorm(h_dim)
         self.proj_head = nn.Linear(h_dim, out_dim)
+        # position embedding
+        if pos_embed_type == 'parity':
+            self.positional_embedding = get_parity_embeddings(max_T, emb_dim)
+        else:
+            self.positional_embedding = get_sinusoidal_positional_embeddings_2(max_T, emb_dim)
+        self.pos_emb_loc = pos_emb_loc  # add or append to token embeddings
 
     def forward(self, x, save_weights=False, apply_embedder=True):
         out_dict = {}
@@ -168,6 +245,15 @@ class Transformer(nn.Module):
             h = x
         else:
             h = self.input_embedder(x)
+        # apply positional encoding
+        if self.pos_emb_loc == 'add':
+            h = h + self.positional_embedding[:, :h.shape[1], :]
+        elif self.pos_emb_loc == 'append':
+            h = torch.cat([h, self.positional_embedding[:, :h.shape[1], :]], dim=-1)
+        elif self.pos_emb_loc == 'none':
+            pass
+        else:
+            raise ValueError("pos_emb_loc must be 'add' or 'append'.")
         # pass through the transformer layers
         for index, block in enumerate(self.blocks):
             h, out = block(h, index=index, save_weights=save_weights)

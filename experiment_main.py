@@ -4,40 +4,20 @@ the classes and the labels just by generating gaussian samples, much like Reddy.
 """
 
 import torch
-from torch.utils.data import DataLoader, IterableDataset
+from torch.utils.data import DataLoader
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import wandb
 
 from configs.fewshot_config import config
-from datasets.gauss_datasets import get_mus_label_class
 from datasets.partial_exposure_sequences import get_partial_exposure_sequence, exemplar_strategy
-from datasets.data_generators import SymbolicDatasetForSampling, SeqGenerator
+from datasets.data_generators import SymbolicDatasetForSampling, SeqGenerator, GaussianDataset
 from input_embedders import GaussianEmbedder
+from main_utils import log_att_weights
 from models import Transformer
-from definitions import WANDB_KEY, ATTENTION_CMAP
-
-
-class MyIterableDataset(IterableDataset):
-    def __init__(self, train_generator, holdout_generator):
-        super(MyIterableDataset).__init__()
-        self.train_generator = train_generator
-        self.holdout_generator = holdout_generator
-        self.mode = 'train'
-
-    def set_mode(self, mode):
-        self.mode = mode
-
-    def __iter__(self):
-        if self.mode == 'train':
-            for item in self.train_generator:
-                yield item
-        elif self.mode == 'holdout':
-            for item in self.holdout_generator:
-                yield item
-        else:
-            raise ValueError('Invalid mode: {}'.format(self.mode))
+from definitions import WANDB_KEY
+from utils import MyIterableDataset
 
 
 def eval_loss_and_accuracy(mod, inputs, labels, criterion):
@@ -58,7 +38,13 @@ if __name__ == '__main__':
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    experiment_name = 'Fewshot-I{}_K{}_N{}_L{}_D{}_a{}_B{}_pB{}_pC{}_eps{}_lr{}_drop{}_{}_ln{}_wDecay{}_hdim{}'.format(
+    if config.model.pos_emb_loc == 'append':
+        h_dim = config.model.emb_dim + config.model.pos_dim
+    else:
+        h_dim = config.model.emb_dim
+
+    experiment_name = '{}-I{}_K{}_N{}_L{}_D{}_a{}_B{}_pB{}_pC{}_eps{}_lr{}_drop{}_{}_ln{}_wDecay{}_hdim{}'.format(
+        config.seq.train_seq_type,
         config.train.niters,
         config.data.K,
         config.seq.N,
@@ -74,32 +60,40 @@ if __name__ == '__main__':
         'custom',
         config.model.apply_ln,
         config.train.w_decay,
-        config.model.h_dim
+        h_dim
     )
-    config.model.out_dim = config.data.L
+    config.model.out_dim = config.data.L  # that's the upper limit on how many labels we can have
     print(experiment_name)
     if config.log.log_to_wandb:
         wandb.login(key=WANDB_KEY)
         wandb.init(project=config.log.wandb_project, name=experiment_name, config=config)
 
+    ### load or construct the dataset
+    if config.data.type == 'gaussian':
+        dataset = GaussianDataset(config.data.K, config.data.L, config.data.D)
+    else:
+        dataset = SymbolicDatasetForSampling(config.data.K)
 
-    # prepare data
-    mus_label, mus_class, labels_class = get_mus_label_class(config.data.K+3, config.data.L, config.data.D)
-    mus_label = torch.Tensor(mus_label)
-    mus_class = torch.Tensor(mus_class)
-    labels_class = torch.Tensor(labels_class).int()
-
-    dataset = SymbolicDatasetForSampling(config.data.S)
     seqgen = SeqGenerator(dataset,
                           config.data.n_rare_classes,
                           config.data.n_common_classes,
                           config.data.n_common_classes,
                           config.data.alpha,
                           noise_scale=0)
-    train_generator = seqgen.get_fewshot_seq('zipfian', config.seq.shots, config.seq.ways, labeling='unfixed', randomly_generate_rare=False)
-    holdout_generator = seqgen.get_fewshot_seq('holdout', config.seq.shots, config.seq.ways, labeling='unfixed', randomly_generate_rare=False)
+    if config.seq.train_seq_type == 'fewshot':
+        train_generator = seqgen.get_fewshot_seq('zipfian', config.seq.shots, config.seq.ways, labeling='unfixed', randomly_generate_rare=False)
+    elif config.seq.train_seq_type == 'bursty':
+        train_generator = seqgen.get_bursty_seq(config.seq.N+1, config.seq.shots, config.seq.ways, config.seq.pB, p_bursty_zipfian=1., labeling_rare='original', labeling_common='original')
+    else:
+        raise ValueError('Invalid training sequence type: {}'.format(config.seq.train_seq_type)
+                         + 'Valid options are: fewshot, bursty')
 
-    iterdataset = MyIterableDataset(train_generator, holdout_generator)
+    holdout_generator = seqgen.get_fewshot_seq('holdout', config.seq.shots, config.seq.ways, labeling='unfixed',  randomly_generate_rare=False)
+
+    # for evaluating in-weight learning, we want sequences with previously seen classes without information in the context
+    iwl_eval_generator = seqgen.get_no_support_seq('zipfian', config.seq.N+1, all_unique=True)
+
+    iterdataset = MyIterableDataset(train_generator, holdout_generator, iwl_eval_generator)
     dataloader = DataLoader(iterdataset, batch_size=config.train.batch_size)
 
     # prepare model
@@ -116,7 +110,6 @@ if __name__ == '__main__':
         batch = next(iterator)
 
         optimizer.zero_grad()
-        # forward_pass_start = time.time()
         y_hat, out_dict = model(batch)
 
         loss = criterion(y_hat, batch['label'][:, -1].long())
@@ -136,19 +129,11 @@ if __name__ == '__main__':
             wandb.log({'holdout_loss': holdout_loss.item(), 'holdout_accuracy': holdout_accuracy.item(), 'iter': n})
 
             if config.save_weights:
-                fig1, ax1 = plt.subplots()
-                ax1.imshow(out_dict['block_0']['weights'].mean(axis=0).squeeze(), cmap=ATTENTION_CMAP)
-                wandb.log({'l0_attn_map_icl': fig1,
-                           'iter': n})  # note: now we're logging the mean of the attention weights across data points
-                fig2, ax2 = plt.subplots()
-                ax2.imshow(out_dict['block_1']['weights'].mean(axis=0).squeeze(), cmap=ATTENTION_CMAP)
-                wandb.log({'l1_attn_map_icl': fig2, 'iter': n})
-                plt.close('all')
+                log_att_weights(n, out_dict, config)
 
-            # calculate the induction strength of each L2 head
+            # calculate the induction strength of each L2 head TODO: this is not showing the right thing
             # this is the difference in attention weights from the query to the correct keys - the incorrect keys
-
-            correct_ids = holdout_batch['label'][:, :-1] == holdout_batch['label'][:, -1].view(1,128).T
+            correct_ids = holdout_batch['label'][:, :-1] == holdout_batch['label'][:, -1].view(1, 128).T
             for h in range(config.model.n_heads):
                 attn_weights = out_dict[f'block_1']['weights'][:, h, :, :]
                 # only get every second column, starting from the second
@@ -163,15 +148,15 @@ if __name__ == '__main__':
             if steps_above_criterion == 5:
                 print('holdout accuracy maximal for 5 successive evaluations, stopping training')
                 break
-    # evaluate on partial exposure paradigm
 
+    # evaluate on partial exposure paradigm
     print('Evaluating on partial exposure paradigm')
     model.eval()
     mod_preds = []
     exemplar_preds = []
     with torch.no_grad():
         for i in range(1000):
-            inputs, input_names, input_labels = get_partial_exposure_sequence(config, mus_label)
+            inputs, input_names, input_labels = get_partial_exposure_sequence(config, input_embedder.mus_label)
             inputs = torch.Tensor(inputs).float()
             pred, out_dict = model(inputs, save_weights=True, apply_embedder=False)
             probs = torch.softmax(pred, dim=-1)
@@ -197,5 +182,3 @@ if __name__ == '__main__':
         model_path = os.path.join(model_dir, f'fewshot_pretrained_i{n}.pth')
         print(f'saving model to {model_path}')
         torch.save(model.state_dict(), model_path)
-
-
