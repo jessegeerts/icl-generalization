@@ -180,8 +180,8 @@ class Block(nn.Module):
             x = self.ln1(x)
         if self.include_mlp:
             x = x + self.mlp(x)  # residual
-        if self.apply_ln:
-            x = self.ln2(x)
+            if self.apply_ln:
+                x = self.ln2(x)
         return x, out_dict
 
 

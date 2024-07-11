@@ -124,18 +124,18 @@ if __name__ == '__main__':
             iterdataset.set_mode('holdout')
             model.eval()
             holdout_batch = next(iterator)
-            holdout_loss, holdout_accuracy, out_dict = eval_loss_and_accuracy(model, holdout_batch, holdout_batch['label'][:, -1].long(), criterion)
+            holdout_loss, holdout_accuracy, out_dict_eval = eval_loss_and_accuracy(model, holdout_batch, holdout_batch['label'][:, -1].long(), criterion)
             print(f'holdout loss: {holdout_loss}, holdout accuracy: {holdout_accuracy}')
             wandb.log({'holdout_loss': holdout_loss.item(), 'holdout_accuracy': holdout_accuracy.item(), 'iter': n})
 
             if config.save_weights:
-                log_att_weights(n, out_dict, config)
+                log_att_weights(n, out_dict_eval, config)
 
-            # calculate the induction strength of each L2 head TODO: this is not showing the right thing
+            # calculate the induction strength of each L2 head
             # this is the difference in attention weights from the query to the correct keys - the incorrect keys
             correct_ids = holdout_batch['label'][:, :-1] == holdout_batch['label'][:, -1].view(1, 128).T
             for h in range(config.model.n_heads):
-                attn_weights = out_dict[f'block_1']['weights'][:, h, :, :]
+                attn_weights = out_dict_eval[f'block_1']['weights'][:, h, :, :]
                 # only get every second column, starting from the second
                 query_to_label = attn_weights[:, -1, 1::2]
                 induction_strength = query_to_label[correct_ids].mean() - query_to_label[~correct_ids].mean()
