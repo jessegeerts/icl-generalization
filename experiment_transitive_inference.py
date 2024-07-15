@@ -16,7 +16,7 @@ from definitions import WANDB_KEY, ATTENTION_CMAP
 import h5py as h5
 import jax.numpy as jnp
 
-
+wandb.login(key=WANDB_KEY)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # ------------------------- Data -------------------------
@@ -28,45 +28,6 @@ with h5.File(embeddings_file, 'r') as f:
 # we only take the first exemplar from each class, for now
 embeddings = embeddings[:, 0, :]
 num_classes,  emb_dim = embeddings.shape
-
-
-# define transitive inference task (e.g. A > B, B > C, C > D, D > E, E > F)
-def get_ic_transitive_inference_sequence(N=5, query_type='adjacent'):
-    """Returns an in-context transitive inference sequence of the form:
-
-    A B B C C D D A
-    ----------- ---
-    Context     query
-
-    The target is 0 or 1 depending on whether the two query items are in the correct order.
-
-    :param N:
-    :param query_type:
-    :return:
-    """
-    # sample N classes
-    classes = np.random.choice(num_classes, N, replace=False)
-    # create the context
-    context = []
-    for i in range(N-1):
-        context.append((classes[i], classes[i+1]))
-    # shuffle the context
-    np.random.shuffle(context)
-    # create the query pair. the query can be an adjacent pair (shown in context) or a non-adjacent pair, with distance > 1
-    if query_type == 'adjacent':
-        query = random.choice(context)
-        target = 1
-        if np.random.rand() < 0.5:
-            query = (query[1], query[0])
-            target = 0
-    else:  # choose the most distal comparison
-        if np.random.rand() < 0.5:
-            query = (classes[0], classes[-1])
-            target = 1
-        else:
-            query = (classes[-1], classes[0])
-            target = 0
-    return context, query, target
 
 
 class TransInfSeqGen:
@@ -243,11 +204,11 @@ def run_experiment(config):
     metrics = {
         'iw_accuracy': [],
         'accuracies': [],
+        'predictions': [],
         'loss': []
     }
 
     if config.log.log_to_wandb:
-        wandb.login(key=WANDB_KEY)
         wandb.init(project=config.log.wandb_project, name=experiment_name, config=config)
 
     seqgen = TransInfSeqGen(config)
@@ -292,82 +253,100 @@ def run_experiment(config):
             metrics['loss'].append(avg_loss)
             losses = []
 
-            # if config.save_weights:
-            #     log_att_weights(n, out_dict, config)
-            #
-            # # ---------------------- Evaluation of adjacent and distal inferences -- in-weight ---------------------
-            # model.eval()
-            #
-            # correct_matrix = np.zeros((seqgen.N, seqgen.N))
-            # pred_matrix = np.zeros((seqgen.N, seqgen.N))
-            #
-            # ranks = np.arange(seqgen.N)
-            # for i, j in itertools.product(ranks, ranks):
-            #     query = (seqgen.fixed_classes[i], seqgen.fixed_classes[j])
-            #     context = seqgen.get_random_context()
-            #     inputs = get_transitive_inference_sequence_embeddings(context, query)
-            #     target = 0 if i == j else 1 if i < j else -1
-            #     inputs = inputs.unsqueeze(0).to(device)
-            #     y_hat, _ = model(inputs)
-            #     pred = torch.sign(y_hat).item()
-            #     correct = int(pred == target)
-            #
-            #     correct_matrix[i, j] = correct
-            #     pred_matrix[i, j] = y_hat.item()
-            #
-            # correct_df = pd.DataFrame(correct_matrix)
-            # pred_df = pd.DataFrame(pred_matrix)
-            #
-            # # Create a figure for the correct matrix
-            # fig_correct = plt.figure()
-            # plt.imshow(correct_matrix, cmap='hot', interpolation='nearest')
-            # plt.title('Correct Matrix')
-            # plt.colorbar()
-            # plt.close(fig_correct)  # Close the figure to prevent it from displaying in your Python environment
-            #
-            # # Create a figure for the pred matrix
-            # fig_pred = plt.figure()
-            # plt.imshow(pred_matrix, cmap='hot', interpolation='nearest')
-            # plt.title('Pred Matrix')
-            # plt.colorbar()
-            # plt.close(fig_pred)  # Close the figure to prevent it from displaying in your Python environment
-            #
-            # # Log the figures as images in wandb
-            # if config.log.log_to_wandb:
-            #     wandb.log({"correct_matrix": wandb.Image(fig_correct), "pred_matrix": wandb.Image(fig_pred), 'iter': n})
-            #
-            # # Initialize a dictionary to store the mean accuracies for each absolute distance
-            # mean_accuracies = {}
-            #
-            # # Calculate the mean accuracy for each distance
-            # for distance in range(-seqgen.N+1, seqgen.N):
-            #     # Get the elements in the diagonal at the current absolute distance
-            #     diagonal_elements = np.diagonal(correct_matrix, offset=distance)
-            #     # Calculate the mean accuracy
-            #     mean_accuracy = np.mean(diagonal_elements)
-            #     # Store the mean accuracy in the dictionary
-            #     abs_distance = abs(distance)
-            #     if abs_distance not in mean_accuracies:
-            #         mean_accuracies[abs_distance] = mean_accuracy
-            #     else:
-            #         mean_accuracies[abs_distance] = (mean_accuracies[abs_distance] + mean_accuracy) / 2
-            # metrics['accuracies'].append(mean_accuracies)
-            #
-            # # Calculate and log the mean accuracy for each absolute distance
-            # for abs_distance, accuracies in mean_accuracies.items():
-            #     mean_accuracy = np.mean(accuracies)
-            #     if config.log.log_to_wandb:
-            #         wandb.log({f"mean_accuracy_abs_distance_{abs_distance}": mean_accuracy, 'iter': n})
+            if config.save_weights:
+                log_att_weights(n, out_dict, config)
+
+            # ---------------------- Evaluation of adjacent and distal inferences -- in-weight ---------------------
+            model.eval()
+
+            correct_matrix = np.zeros((seqgen.N, seqgen.N))
+            pred_matrix = np.zeros((seqgen.N, seqgen.N))
+
+            ranks = np.arange(seqgen.N)
+            for i, j in itertools.product(ranks, ranks):
+                query = (seqgen.fixed_classes[i], seqgen.fixed_classes[j])
+                context = seqgen.get_random_context()
+                inputs = get_transitive_inference_sequence_embeddings(context, query)
+                target = 0 if i == j else 1 if i < j else -1
+                inputs = inputs.unsqueeze(0).to(device)
+                y_hat, _ = model(inputs)
+                pred = torch.sign(y_hat).item()
+                correct = int(pred == target)
+
+                correct_matrix[i, j] = correct
+                pred_matrix[i, j] = y_hat.item()
+
+
+            # Create a figure for the correct matrix
+            fig_correct = plt.figure()
+            plt.imshow(correct_matrix, cmap='hot', interpolation='nearest')
+            plt.title('Correct Matrix')
+            plt.colorbar()
+            plt.close(fig_correct)  # Close the figure to prevent it from displaying in your Python environment
+
+            # Create a figure for the pred matrix
+            fig_pred = plt.figure()
+            plt.imshow(pred_matrix, cmap='hot', interpolation='nearest')
+            plt.title('Pred Matrix')
+            plt.colorbar()
+            plt.close(fig_pred)  # Close the figure to prevent it from displaying in your Python environment
+
+            # Log the figures as images in wandb
+            if config.log.log_to_wandb:
+                wandb.log({"correct_matrix": wandb.Image(fig_correct), "pred_matrix": wandb.Image(fig_pred), 'iter': n})
+
+            # Initialize a dictionary to store the mean accuracies for each absolute distance
+            mean_accuracies = {}
+            mean_preds = {}
+            # Calculate the mean accuracy and output for each distance
+            for distance in range(-seqgen.N+1, seqgen.N):
+                # Get the elements in the diagonal at the current absolute distance
+                diagonal_elements = np.diagonal(correct_matrix, offset=distance)
+                diagonal_pred = np.diagonal(pred_matrix, offset=distance)
+                # Calculate the mean accuracy
+                mean_accuracy = np.mean(diagonal_elements)
+                mean_pred = np.mean(diagonal_pred)
+                # Store the mean accuracy in the dictionary
+                abs_distance = abs(distance)
+                if abs_distance not in mean_accuracies:
+                    mean_accuracies[abs_distance] = mean_accuracy
+                else:
+                    mean_accuracies[abs_distance] = (mean_accuracies[abs_distance] + mean_accuracy) / 2
+                # store the mean prediction in the dictionary (by distance, not absolute distance)
+                mean_preds[distance] = mean_pred
+
+            metrics['accuracies'].append(mean_accuracies)
+            metrics['predictions'].append(mean_preds)
+
+            # Calculate and log the mean accuracy for each absolute distance
+            for abs_distance, accuracies in mean_accuracies.items():
+                mean_accuracy = np.mean(accuracies)
+                if config.log.log_to_wandb:
+                    wandb.log({f"mean_accuracy_abs_distance_{abs_distance}": mean_accuracy, 'iter': n})
 
     return metrics
 
+if __name__ == '__main__':
+    import os
 
-metrics = run_experiment(config)
+    n_runs = 20
+    all_metrics = []
+    for i in range(n_runs):
+        torch.manual_seed(i)
+        print('-----------------------------------')
+        print(f'Running experiment {i}')
+        print('-----------------------------------')
+        if not os.path.exists('results'):
+            os.makedirs('results')
+        if os.path.exists(os.path.join('results', f'metrics_run_{i}.csv')):
+            continue
 
-accuracy_df = pd.DataFrame(metrics['accuracies']).sort_index(axis=1)
+        metrics = run_experiment(config)
+        all_metrics.append(metrics)
 
-sns.lineplot(data=accuracy_df, palette='flare')
-plt.xlabel(f'Iteration (x{config.log.logging_interval})')
-plt.ylabel('Mean accuracy')
-plt.savefig('accuracy_plot.png')
-plt.show()
+        acc_df = pd.DataFrame(metrics['accuracies']).rename(columns={d: f'mean_accuracy_at_abs(distance)_{d}' for d in metrics['accuracies'][0].keys()})
+        pred_df = pd.DataFrame(metrics['predictions']).rename(columns={d: f'mean_prediction_at_distance_{d}' for d in metrics['predictions'][0].keys()})
+
+        metrics_df = pd.concat([acc_df, pred_df], axis=1).assign(run=i)
+        metrics_df.to_csv(os.path.join('results', f'metrics_run_{i}.csv'), index=False)
+

@@ -2,7 +2,7 @@ from utils import dotdict as dd
 
 config = dd(dict(
     model=dd(dict(
-        h_dim=512,                      # hidden dimensionality of the transformer model
+        pos_dim=512,                      # hidden dimensionality of the transformer model
         emb_dim=512,                    # dimensionality of the input embeddings
         n_heads=4,
         n_blocks=2,
@@ -21,19 +21,19 @@ config = dd(dict(
         K=1623
     )),
     seq=dd(dict(
-        N=2,                        # number of examples in the sequence
+        N=5,                        # number of examples in the sequence
         repeats=1,
-        train_type='testICclass',            # type of training sequence (IW or IC)
+        train_type='IW',            # type of training sequence (IW or IC)
     )),
     train=dd(dict(
         batch_size=1,
         learning_rate=.0001,
         w_decay=1e-5,           # L2 regularisation parameter. note the torch implementation is a bit different from reddy jax code (it's multiplied by LR, so divide by LR to get desired w_decay param )
-        niters=10000
+        niters=2000
     )),
     log=dd(dict(
         log_to_wandb=True,
-        logging_interval=100,  # iterations
+        logging_interval=40,  # iterations
         wandb_project="TransitiveInference",
     )),
     save_weights=True,  # save attention weights for logging purposes
