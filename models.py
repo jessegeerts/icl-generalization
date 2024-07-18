@@ -3,7 +3,8 @@
 
 import torch
 import torch.nn as nn
-from torch.nn import functional as F
+from torch import nn as nn
+from torch.nn import functional as F, TransformerEncoderLayer, TransformerEncoder
 import math
 
 
@@ -267,3 +268,19 @@ class Transformer(nn.Module):
 
 if __name__=='__main__':
     mod = MaskedCausalAttention(128, 32, 1, .1)
+
+
+class MyTransformer(nn.Module):
+    """Standard transformer model (encoder only).
+    """
+    def __init__(self, config, device):
+        super(MyTransformer, self).__init__()
+        self.encoder_layers = TransformerEncoderLayer(d_model=config.model.emb_dim * 2, nhead=config.model.n_heads)
+        self.transformer_encoder = TransformerEncoder(encoder_layer=self.encoder_layers,
+                                                      num_layers=config.model.n_blocks).to(device)
+        self.linear = nn.Linear(config.model.emb_dim * 2, 1).to(device)
+
+    def forward(self, src):
+        output = self.transformer_encoder(src)
+        output = self.linear(output)
+        return output

@@ -2,7 +2,7 @@ from utils import dotdict as dd
 
 config = dd(dict(
     model=dd(dict(
-        pos_dim=65,
+        pos_dim=64,
         emb_dim=64,
         n_heads=1,
         n_blocks=2,
@@ -13,7 +13,7 @@ config = dd(dict(
         widening_factor=1,              # how much wider is the MLP hidden dim
         max_T=32,                       # max sequence length for the model
         out_dim=None,                    # note this is set later (dependent on N labels in data)
-        drop_p=0.0,
+        drop_p=0.1,
         pos_emb_loc='none',  # in this experiment we add position embeddings already in the embedder class
         prediction_mode='regress'
     )),
@@ -31,9 +31,9 @@ config = dd(dict(
         Nmax=32,
     )),
     seq=dd(dict(
-        ways=2,
+        ways=2,                  # number of classes in a few-shot task
         shots=1,
-        N=2*1,                   # sequence length will be 2N + 1
+        N=2*1,                   # sequence length will be 3N + 2 (note this must be at least ways*shots, actually currently exactly ways*shots)
         B=4,
         pB=1.,
         pC=1.,

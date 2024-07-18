@@ -329,16 +329,17 @@ def run_experiment(config):
 if __name__ == '__main__':
     import os
 
-    n_runs = 20
+    n_runs = 40
     all_metrics = []
     for i in range(n_runs):
         torch.manual_seed(i)
         print('-----------------------------------')
         print(f'Running experiment {i}')
         print('-----------------------------------')
-        if not os.path.exists('results'):
-            os.makedirs('results')
-        if os.path.exists(os.path.join('results', f'metrics_run_{i}.csv')):
+        save_dir = f'results/{config.seq.train_type}'
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        if os.path.exists(os.path.join(save_dir, f'metrics_run_{i}.csv')):
             continue
 
         metrics = run_experiment(config)
@@ -348,5 +349,5 @@ if __name__ == '__main__':
         pred_df = pd.DataFrame(metrics['predictions']).rename(columns={d: f'mean_prediction_at_distance_{d}' for d in metrics['predictions'][0].keys()})
 
         metrics_df = pd.concat([acc_df, pred_df], axis=1).assign(run=i)
-        metrics_df.to_csv(os.path.join('results', f'metrics_run_{i}.csv'), index=False)
+        metrics_df.to_csv(os.path.join(save_dir, f'metrics_run_{i}.csv'), index=False)
 
