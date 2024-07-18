@@ -5,8 +5,7 @@ import random
 from itertools import product
 
 import numpy as np
-import tensorflow as tf
-import tensorflow_datasets as tfds
+
 
 IMAGE_SIZE = 105
 N_CHARACTER_CLASSES = 1623
