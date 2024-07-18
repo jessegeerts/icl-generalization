@@ -18,6 +18,7 @@ from definitions import WANDB_KEY
 from utils import MyIterableDataset
 from utils import dotdict as dd
 
+
 def eval_loss_and_accuracy(mod, inputs, labels, criterion, config):
     y_hat, out_dict = mod(inputs, save_weights=config.save_weights)
 
@@ -192,7 +193,7 @@ if __name__ == '__main__':
             "train.learning_rate": {"max": 0.001, "min": 0.000005, "distribution": "uniform"},
             "train.w_decay": {"max": 0.0008, "min": 0.000001, "distribution": "uniform"},
             "model.n_blocks": {"max": 8, "min": 1, "distribution": "int_uniform"},
-            "model.n_heads": {"max": 8, "min": 1, "distribution": "int_uniform"},
+            "model.n_heads": {"values": [1, 2, 4, 8], "distribution": "categorical"},
             "model.include_mlp": {"values": [True, False], "distribution": "categorical"},
             # "seq.shots": {"max": 4, "min": 1, "distribution": "int_uniform"}
         }
