@@ -1,7 +1,3 @@
-"""
-In this script I try fewshot learning with the symbolic dataset. I will use the Reddy et al. model and I will "embed"
-the classes and the labels just by generating gaussian samples, much like Reddy.
-"""
 
 import torch
 from torch.utils.data import DataLoader
@@ -109,7 +105,7 @@ def main():
 
     # model = MyTransformer(config, device)
     optimizer = optim.Adam(model.parameters(), lr=config.train.learning_rate, weight_decay=config.train.w_decay)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100, eta_min=.00001)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.train.niters, eta_min=.00001)
 
 
     if config.model.prediction_mode == 'classify':
@@ -137,8 +133,9 @@ def main():
         loss = criterion(y_hat, batch['label'][:, -1].float().view(-1, 1))
         loss.backward()
         optimizer.step()
+        scheduler.step()
 
-        if n % config.log.logging_interval == 0 and n > 0:  # fixme: remove this condition
+        if n % config.log.logging_interval == 0:  # fixme: remove this condition
             print(f'iteration {n}, loss {loss}')
             wandb.log({'loss': loss.item(), 'iter': n})
             # log current learning rate
@@ -174,7 +171,7 @@ def main():
             if steps_above_criterion == 5:
                 print('holdout accuracy maximal for 5 successive evaluations, stopping training')
                 break
-            scheduler.step()
+
 
 
 if __name__ == '__main__':

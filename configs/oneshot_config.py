@@ -1,11 +1,12 @@
 from utils import dotdict as dd
 
+
 config = dd(dict(
     model=dd(dict(
         pos_dim=64,
         emb_dim=64,
-        n_heads=1,
-        n_blocks=4,
+        n_heads=4,
+        n_blocks=2,
         include_mlp=False,
         activation='relu',              # activation fn for the MLP
         n_mlp_layers=None,              # TODO: make this mutable
@@ -41,9 +42,9 @@ config = dd(dict(
     )),
     train=dd(dict(
         batch_size=128,
-        learning_rate=.001,
-        w_decay=1e-4,           # L2 regularisation parameter. note the torch implementation is a bit different from reddy jax code (it's multiplied by LR, so divide by LR to get desired w_decay param )
-        niters=10000
+        learning_rate=0.0004185523007112337,
+        w_decay=1.854679382864038e-05,           # L2 regularisation parameter
+        niters=20000
     )),
     log=dd(dict(
         log_to_wandb=True,
