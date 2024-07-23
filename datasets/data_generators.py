@@ -900,6 +900,77 @@ class TransInfSeqGenerator:
 
             yield record
 
+    def get_AB_BB_seqs(self, shots):
+        """Generate a sequence of examples for an even simpler task where it's AB vs BB (suggested by claudia).
+
+        :param n_classes:
+        :param shots:
+        :return:
+        """
+        while True:
+            classes = np.random.choice(self.classes, size=2, replace=False)
+            # create the context
+            context = []
+
+            context.append((classes[0], classes[1], 1))
+            context.append((classes[1], classes[1], -1))
+
+            # repeat the context for the number of shots
+            context = context * shots
+            # shuffle the context
+            np.random.shuffle(context)
+            # create the query
+            query = random.choice(context)
+
+            # c
+            examples = [element for tup in context for element in tup[:2]]
+            examples.extend(query[:2])
+            labels = [tup[2] for tup in context]  #
+            labels.append(query[2])
+
+            record = {
+                'example': np.array(examples),
+                'label': np.array(labels)
+            }
+
+            yield record
+
+    def get_AB_BA_seqs(self, shots):
+        """Generate a sequence of examples for an even simpler task where it's AB vs BB (suggested by claudia).
+
+        :param n_classes:
+        :param shots:
+        :return:
+        """
+        while True:
+            classes = np.random.choice(self.classes, size=2, replace=False)
+            # create the context
+            context = []
+
+            context.append((classes[0], classes[1], 1))
+            context.append((classes[1], classes[0], -1))
+
+            # repeat the context for the number of shots
+            context = context * shots
+            # shuffle the context
+            np.random.shuffle(context)
+            # create the query
+            query = random.choice(context)
+
+            # c
+            examples = [element for tup in context for element in tup[:2]]
+            examples.extend(query[:2])
+            labels = [tup[2] for tup in context]  #
+            labels.append(query[2])
+
+            record = {
+                'example': np.array(examples),
+                'label': np.array(labels)
+            }
+
+            yield record
+
+
 
 def _bytes2str(x):
     """Convert bytes to str, if needed."""

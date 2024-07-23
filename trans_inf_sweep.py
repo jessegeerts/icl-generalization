@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 import torch.nn as nn
 import torch.optim as optim
 import wandb
+import math
 
 from configs.oneshot_config import config as default_config
 from datasets.data_generators import SymbolicDatasetForSampling, TransInfSeqGenerator, GaussianDataset
@@ -42,9 +43,9 @@ def update_nested_config(config, update):
     return config
 
 
-def main():
+def main(seq_type='order'):
 
-    run = wandb.init()
+    run = wandb.init(project=seq_type)
 
     config = default_config.copy()
     sweep_params = {key: value for key, value in run.config.items()}
@@ -57,31 +58,12 @@ def main():
     else:
         h_dim = config.model.emb_dim
 
-    experiment_name = '{}-I{}_K{}_N{}_L{}_D{}_a{}_B{}_pB{}_pC{}_eps{}_lr{}_drop{}_{}_ln{}_wDecay{}_hdim{}_{}'.format(
-        config.seq.train_seq_type,
-        config.train.niters,
-        config.data.K,
-        config.seq.N,
-        config.data.L,
-        config.data.D,
-        config.data.alpha,
-        config.seq.B,
-        config.seq.pB,
-        config.seq.pC,
-        config.data.eps,
-        config.train.learning_rate,
-        config.model.drop_p,
-        'custom',
-        config.model.apply_ln,
-        config.train.w_decay,
-        h_dim,
-        config.model.prediction_mode
-    )
+    config.seq.N = config.seq.ways * config.seq.shots
+
     if config.model.prediction_mode == 'classify':
         config.model.out_dim = config.data.L
     else:
         config.model.out_dim = 1  # for regression
-    print(experiment_name)
 
     ### load or construct the dataset
     if config.data.type == 'gaussian':
@@ -90,12 +72,23 @@ def main():
         dataset = SymbolicDatasetForSampling(config.data.K)
 
     seqgen = TransInfSeqGenerator(dataset)
-    # todo: we can swap this for "in-weight" sequences with constant mapping
-    train_generator = seqgen.get_fewshot_order_seq(config.seq.ways, config.seq.shots)
 
-    holdout_generator = seqgen.get_fewshot_order_seq(config.seq.ways, config.seq.shots)
-    # fixme: this is just a placeholder for now
-    iwl_generator = seqgen.get_fewshot_order_seq(config.seq.ways, config.seq.shots)
+    if seq_type == 'order':
+        # todo: we can swap this for "in-weight" sequences with constant mapping
+        train_generator = seqgen.get_fewshot_order_seq(config.seq.ways, config.seq.shots)
+        holdout_generator = seqgen.get_fewshot_order_seq(config.seq.ways, config.seq.shots)
+        # fixme: this is just a placeholder for now
+        iwl_generator = seqgen.get_fewshot_order_seq(config.seq.ways, config.seq.shots)
+    elif seq_type == 'ABBB':
+        train_generator = seqgen.get_AB_BB_seqs(config.seq.shots)
+        holdout_generator = seqgen.get_AB_BB_seqs(config.seq.shots)
+        iwl_generator = seqgen.get_AB_BB_seqs(config.seq.shots)
+    elif seq_type == 'ABBA':
+        train_generator = seqgen.get_AB_BA_seqs(config.seq.shots)
+        holdout_generator = seqgen.get_AB_BA_seqs(config.seq.shots)
+        iwl_generator = seqgen.get_AB_BA_seqs(config.seq.shots)
+    else:
+        raise ValueError('Invalid sequence type: {}'.format(seq_type))
     iterdataset = MyIterableDataset(train_generator, holdout_generator, iwl_generator)
     dataloader = DataLoader(iterdataset, batch_size=config.train.batch_size)
 
@@ -105,7 +98,29 @@ def main():
 
     # model = MyTransformer(config, device)
     optimizer = optim.Adam(model.parameters(), lr=config.train.learning_rate, weight_decay=config.train.w_decay)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.train.niters, eta_min=.00001)
+    if config.train.lr_scheduler == 'cosine':
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.train.niters, eta_min=.00001)
+    elif config.train.lr_scheduler == 'none':
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda epoch: 1.)
+    elif config.train.lr_scheduler == 'warmup_cosine':
+        scheduler = optim.lr_scheduler.LambdaLR(
+            optimizer,
+            lr_lambda=lambda step: min((step + 1) / config.train.warmup_steps, 1.0) * 0.5 * (
+                        1 + math.cos(step / config.train.niters * math.pi))
+        )
+    elif config.train.lr_scheduler == 'warmup_linear':
+        scheduler = optim.lr_scheduler.LambdaLR(
+            optimizer,
+            lr_lambda=lambda step: min((step + 1) / config.train.warmup_steps, 1.0) * (1 - step / config.train.niters)
+        )
+    elif config.train.lr_scheduler == 'warmup_constant':
+        scheduler = optim.lr_scheduler.LambdaLR(
+            optimizer,
+            lr_lambda=lambda step: min((step + 1) / config.train.warmup_steps * config.train.learning_rate,
+                                        config.train.learning_rate)
+        )
+    else:
+        raise ValueError('Invalid learning rate scheduler: {}'.format(config.train.lr_scheduler))
 
 
     if config.model.prediction_mode == 'classify':
@@ -188,11 +203,13 @@ if __name__ == '__main__':
         "metric": {"goal": "minimize", "name": "loss"},
         "parameters": {
             "train.learning_rate": {"max": 0.001, "min": 0.000005, "distribution": "uniform"},
-            "train.w_decay": {"max": 0.0008, "min": 0.000001, "distribution": "uniform"},
+            "train.w_decay": {"max": 0.0009, "min": 0.000001, "distribution": "uniform"},
             "model.n_blocks": {"max": 8, "min": 1, "distribution": "int_uniform"},
             "model.n_heads": {"values": [1, 2, 4, 8], "distribution": "categorical"},
             "model.include_mlp": {"values": [True, False], "distribution": "categorical"},
-            # "seq.shots": {"max": 4, "min": 1, "distribution": "int_uniform"}
+            "seq.shots": {"max": 4, "min": 1, "distribution": "int_uniform"},
+            "model.pos_emb_type": {"values": ["sinusoidal", "onehot"], "distribution": "categorical"},
+            "train.warmup_steps": {"max": 5000, "min": 1000, "distribution": "int_uniform"},
         }
     }
 

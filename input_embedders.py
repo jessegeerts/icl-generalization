@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from datasets.gauss_datasets import get_mus_label_class
+from models import get_sinusoidal_positional_embeddings_2
 
 
 class GaussianEmbedder(nn.Module):
@@ -68,6 +69,9 @@ class GaussianEmbedderForOrdering(nn.Module):
         self.D = config.data.D
         self.L = config.data.L
         self.S = config.train.batch_size
+        self.pos_embedding_type = config.model.pos_emb_type
+        if config.model.pos_emb_type == 'sinusoidal':
+            self.positional_embedding = get_sinusoidal_positional_embeddings_2(config.model.max_T * 3, self.D)
 
         self.mus_label, self.mus_class, self.labels_class = self.get_mus_label_class(config.data.K, config.data.L, config.data.D)
 
@@ -83,7 +87,7 @@ class GaussianEmbedderForOrdering(nn.Module):
     def forward(self, batch):
         examples = batch['example']
         labels = batch['label']
-
+        self.pos_embedding_type = 'sinusoidal'
         inputs = torch.zeros((self.config.train.batch_size, 3 * self.N + 2, 2 * self.Nmax  + self.config.data.D))
 
         # fill every first 2 indices with class examples
@@ -98,9 +102,13 @@ class GaussianEmbedderForOrdering(nn.Module):
 
         # add positional encoding (random shifts)
         shifts = np.random.choice((2 * self.Nmax + 2) - (2 * self.N + 2) + 1, size=(self.S))
-        for s in range(self.S):
-            inputs[s, :, shifts[s]:shifts[s] + 3 * self.N + 2] = torch.Tensor(np.identity(3 * self.N + 2))
-
+        if self.pos_embedding_type == 'onehot':
+            for s in range(self.S):
+                inputs[s, :, shifts[s]:shifts[s] + 3 * self.N + 2] = torch.Tensor(np.identity(3 * self.N + 2))
+        else:
+            for s in range(self.S):
+                s = 0
+                inputs[s, :, :2 * self.Nmax] = self.positional_embedding[0, shifts[s]: shifts[s] + 3*self.N+2]
         # sum each pair of class examples (temp solution)
         # reshaped_inputs = inputs.view(inputs.shape[0], -1, 2, inputs.shape[2])
         # inputs = torch.sum(reshaped_inputs, dim=2)
