@@ -53,11 +53,6 @@ def main(seq_type='order'):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    if config.model.pos_emb_loc == 'append':
-        h_dim = config.model.emb_dim + config.model.pos_dim
-    else:
-        h_dim = config.model.emb_dim
-
     config.seq.N = config.seq.ways * config.seq.shots
 
     if config.model.prediction_mode == 'classify':
@@ -120,7 +115,6 @@ def main(seq_type='order'):
         )
     else:
         raise ValueError('Invalid learning rate scheduler: {}'.format(config.train.lr_scheduler))
-
 
     if config.model.prediction_mode == 'classify':
         criterion = nn.CrossEntropyLoss()
@@ -201,7 +195,7 @@ if __name__ == '__main__':
         "method": "bayes",
         "metric": {"goal": "minimize", "name": "loss"},
         "parameters": {
-            "train.learning_rate": {"max": 0.001, "min": 0.000005, "distribution": "uniform"},
+            "train.learning_rate": {"max": 0.00056, "min": 0.00034, "distribution": "uniform"},
             "train.w_decay": {"max": 0.0009, "min": 0.000001, "distribution": "uniform"},
             "model.n_blocks": {"max": 8, "min": 1, "distribution": "int_uniform"},
             "model.n_heads": {"values": [1, 2, 4, 8], "distribution": "categorical"},
@@ -209,6 +203,7 @@ if __name__ == '__main__':
             "seq.shots": {"max": 4, "min": 1, "distribution": "int_uniform"},
             "model.pos_emb_type": {"values": ["sinusoidal", "onehot"], "distribution": "categorical"},
             "train.warmup_steps": {"max": 5000, "min": 1000, "distribution": "int_uniform"},
+            "train.lr_scheduler": {"values": ["warmup_constant", "warmup_cosine", "cosine", "none"], "distribution": "categorical"},
         }
     }
 
