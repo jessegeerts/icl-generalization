@@ -87,7 +87,6 @@ class GaussianEmbedderForOrdering(nn.Module):
     def forward(self, batch):
         examples = batch['example']
         labels = batch['label']
-        self.pos_embedding_type = 'sinusoidal'
         inputs = torch.zeros((self.config.train.batch_size, 3 * self.N + 2, 2 * self.Nmax  + self.config.data.D))
 
         # fill every first 2 indices with class examples

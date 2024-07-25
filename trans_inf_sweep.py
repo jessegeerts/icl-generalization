@@ -116,8 +116,7 @@ def main(seq_type='order'):
     elif config.train.lr_scheduler == 'warmup_constant':
         scheduler = optim.lr_scheduler.LambdaLR(
             optimizer,
-            lr_lambda=lambda step: min((step + 1) / config.train.warmup_steps * config.train.learning_rate,
-                                        config.train.learning_rate)
+            lr_lambda=lambda step: min((step + 1) / config.train.warmup_steps, 1.0)
         )
     else:
         raise ValueError('Invalid learning rate scheduler: {}'.format(config.train.lr_scheduler))
