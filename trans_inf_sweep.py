@@ -43,15 +43,20 @@ def update_nested_config(config, update):
     return config
 
 
-def main(seq_type='order'):
-
-    run = wandb.init(project=seq_type)
-
-    config = default_config.copy()
-    sweep_params = {key: value for key, value in run.config.items()}
-    config = dd(update_nested_config(config, sweep_params))
+def main(cfg, seq_type='order'):
+    config = dd(cfg.copy())
+    if cfg.log.log_to_wandb:
+        run = wandb.init(project=seq_type)
+        sweep_params = {key: value for key, value in run.config.items()}
+        config = dd(update_nested_config(config, sweep_params))
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    metrics = {
+        'holdout_accuracy': [],
+        'predictions': [],
+        'loss': []
+    }
 
     config.seq.N = config.seq.ways * config.seq.shots
 
@@ -143,12 +148,14 @@ def main(seq_type='order'):
         optimizer.step()
         scheduler.step()
 
-        if n % config.log.logging_interval == 0:  # fixme: remove this condition
+        if n % config.log.logging_interval == 0:
             print(f'iteration {n}, loss {loss}')
-            wandb.log({'loss': loss.item(), 'iter': n})
-            # log current learning rate
-            for param_group in optimizer.param_groups:
-                wandb.log({'lr': param_group['lr'], 'iter': n})
+            if cfg.log.log_to_wandb:
+                # log current loss
+                wandb.log({'loss': loss.item(), 'iter': n})
+                # log current learning rate
+                for param_group in optimizer.param_groups:
+                    wandb.log({'lr': param_group['lr'], 'iter': n})
 
             # evaluate on holdout set
             iterdataset.set_mode('holdout')
@@ -156,7 +163,10 @@ def main(seq_type='order'):
             holdout_batch = next(iterator)
             holdout_loss, holdout_accuracy, out_dict_eval = eval_loss_and_accuracy(model, holdout_batch, holdout_batch['label'][:, -1].long(), criterion, config)
             print(f'holdout loss: {holdout_loss}, holdout accuracy: {holdout_accuracy}')
-            wandb.log({'holdout_loss': holdout_loss.item(), 'holdout_accuracy': holdout_accuracy.item(), 'iter': n})
+            if cfg.log.log_to_wandb:
+                wandb.log({'holdout_loss': holdout_loss.item(), 'holdout_accuracy': holdout_accuracy.item(), 'iter': n})
+            metrics['holdout_accuracy'].append(holdout_accuracy.item())
+            metrics['loss'].append(loss.item())
             if config.save_weights:
                 log_att_weights(n, out_dict_eval, config)
 
@@ -170,7 +180,8 @@ def main(seq_type='order'):
                     # only get every second column, starting from the second
                     query_to_label = attn_weights[:, -1, 1::2]
                     induction_strength = query_to_label[correct_ids].mean() - query_to_label[~correct_ids].mean()
-                    wandb.log({f'induction_strength_head_{h}': induction_strength.item(), 'iter': n})
+                    if cfg.log.log_to_wandb:
+                        wandb.log({f'induction_strength_head_{h}': induction_strength.item(), 'iter': n})
 
             if holdout_accuracy == 1.:
                 steps_above_criterion += 1
@@ -180,10 +191,15 @@ def main(seq_type='order'):
                 print('holdout accuracy maximal for 5 successive evaluations, stopping training')
                 break
 
+    if config.log.log_to_wandb:
+        run.finish()
+    return metrics
+
 
 
 if __name__ == '__main__':
     import os
+    from functools import partial
 
     wandb.login(key=WANDB_KEY)
 
@@ -208,6 +224,7 @@ if __name__ == '__main__':
     }
 
     sweep_id = wandb.sweep(sweep=sweep_configuration, project="ic_transinf_sweep")
+    main = partial(main, default_config)
     wandb.agent(sweep_id=sweep_id, function=main)
 
 

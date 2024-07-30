@@ -87,7 +87,7 @@ class GaussianEmbedderForOrdering(nn.Module):
     def forward(self, batch):
         examples = batch['example']
         labels = batch['label']
-        inputs = torch.zeros((self.config.train.batch_size, 3 * self.N + 2, 2 * self.Nmax  + self.config.data.D))
+        inputs = torch.zeros((self.config.train.batch_size, 3 * self.N + 2, 2 * self.Nmax + self.config.data.D))
 
         # fill every first 2 indices with class examples
         inputs[:, ::3, 2 * self.Nmax:] = \
@@ -100,16 +100,28 @@ class GaussianEmbedderForOrdering(nn.Module):
         inputs[:, 2:-2:3, 2 * self.Nmax:] = self.mus_label[labels[:, :-1]]
 
         # add positional encoding (random shifts)
-        shifts = np.random.choice((2 * self.Nmax + 2) - (2 * self.N + 2) + 1, size=(self.S))
-        if self.pos_embedding_type == 'onehot':
+        if self.config.model.add_pos_encodings:
+            shifts = np.random.choice((2 * self.Nmax + 2) - (2 * self.N + 2) + 1, size=(self.S))
             for s in range(self.S):
-                inputs[s, :, shifts[s]:shifts[s] + 3 * self.N + 2] = torch.Tensor(np.identity(3 * self.N + 2))
-        else:
-            for s in range(self.S):
-                s = 0
-                inputs[s, :, :2 * self.Nmax] = self.positional_embedding[0, shifts[s]: shifts[s] + 3*self.N+2]
-        # sum each pair of class examples (temp solution)
-        # reshaped_inputs = inputs.view(inputs.shape[0], -1, 2, inputs.shape[2])
-        # inputs = torch.sum(reshaped_inputs, dim=2)
+                if self.config.model.pos_emb_randomization == 'per_batch':
+                    shift_choice = 0
+                    write_to_example = s
+                elif self.config.model.pos_emb_randomization == 'per_sequence':
+                    shift_choice = s
+                    write_to_example = s
+                elif self.config.model.pos_emb_randomization == 'only_first':
+                    shift_choice = 0
+                    write_to_example = 0
+                else:
+                    raise ValueError('Invalid positional embedding randomization: {}'.format(
+                        self.config.model.pos_emb_randomization))
 
+                if self.pos_embedding_type == 'onehot':
+                    inputs[write_to_example, :,
+                    shifts[shift_choice]:shifts[shift_choice] + 3 * self.N + 2] = torch.Tensor(
+                        np.identity(3 * self.N + 2))
+                else:
+                    inputs[write_to_example, :, :2 * self.Nmax] = self.positional_embedding[0,
+                                                                  shifts[shift_choice]: shifts[
+                                                                                            shift_choice] + 3 * self.N + 2]
         return inputs

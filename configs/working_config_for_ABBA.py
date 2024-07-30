@@ -18,6 +18,8 @@ config = dd(dict(
         pos_emb_loc='none',  # in this experiment we add position embeddings already in the embedder class
         prediction_mode='regress',
         pos_emb_type='sinusoidal',  # in this experiment we add position embeddings already in the embedder class (sinusoidal or onehot)
+        pos_emb_randomization='per_batch',
+        add_pos_encodings=True
     )),
     data=dd(dict(
         S=1603,
@@ -47,7 +49,7 @@ config = dd(dict(
         w_decay=7.091481879812184e-05,           # L2 regularisation parameter
         lr_scheduler='warmup_constant',
         warmup_steps=3000,
-        niters=80000
+        niters=20000
     )),
     log=dd(dict(
         log_to_wandb=True,
