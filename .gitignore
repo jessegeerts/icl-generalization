@@ -8,3 +8,4 @@ experiments/iwl_icl_classification/results/*
 reddy/*
 *.png
 *.npy
+*.csv
