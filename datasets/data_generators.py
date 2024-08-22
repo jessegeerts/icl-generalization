@@ -854,6 +854,10 @@ class TransInfSeqGenerator:
         self.example_type = dataset_for_sampling.example_type
         self.data = dataset_for_sampling.data
         self.classes = sorted(self.data.keys())
+        # first 80% of classes are train classes
+        self.train_classes = self.classes[:int(0.8 * len(self.classes))]
+        # last 20% of classes are test classes
+        self.test_classes = self.classes[int(0.8 * len(self.classes)):]
 
     def get_fewshot_order_seq(self, n_classes, shots):
         """Generate a sequence of examples for a few-shot ordering task. Labels
@@ -871,7 +875,13 @@ class TransInfSeqGenerator:
         :return:
         """
         while True:
-            classes = np.random.choice(self.classes, size=n_classes, replace=False)
+            if set == 'train':
+                classes = np.random.choice(self.train_classes, size=n_classes, replace=False)
+            elif set == 'test':
+                classes = np.random.choice(self.test_classes, size=n_classes, replace=False)
+            else:  # set == 'all'
+                classes = np.random.choice(self.classes, size=n_classes, replace=False)
+
             rank = np.arange(n_classes)
             # create the context
             context = []
@@ -935,7 +945,7 @@ class TransInfSeqGenerator:
 
             yield record
 
-    def get_AB_BA_seqs(self, shots):
+    def get_AB_BA_seqs(self, shots, set='train'):
         """Generate a sequence of examples for an even simpler task where it's AB vs BB (suggested by claudia).
 
         :param n_classes:
@@ -943,7 +953,12 @@ class TransInfSeqGenerator:
         :return:
         """
         while True:
-            classes = np.random.choice(self.classes, size=2, replace=False)
+            if set == 'train':
+                classes = np.random.choice(self.train_classes, size=2, replace=False)
+            elif set == 'test':
+                classes = np.random.choice(self.test_classes, size=2, replace=False)
+            else:  # set == 'all'
+                classes = np.random.choice(self.classes, size=2, replace=False)
             # create the context
             context = []
 

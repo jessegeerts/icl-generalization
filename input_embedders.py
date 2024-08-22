@@ -112,6 +112,13 @@ class GaussianEmbedderForOrdering(nn.Module):
                 elif self.config.model.pos_emb_randomization == 'only_first':
                     shift_choice = 0
                     write_to_example = 0
+                elif self.config.model.pos_emb_randomization == 'only_last':
+                    shift_choice = 0
+                    write_to_example = self.S - 1
+                elif self.config.model.pos_emb_randomization == 'no_shift':
+                    shifts = np.zeros(self.S, dtype=int)
+                    shift_choice = 0
+                    write_to_example = s
                 else:
                     raise ValueError('Invalid positional embedding randomization: {}'.format(
                         self.config.model.pos_emb_randomization))

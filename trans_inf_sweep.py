@@ -5,15 +5,19 @@ import torch.nn as nn
 import torch.optim as optim
 import wandb
 import math
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from configs.oneshot_config import config as default_config
 from datasets.data_generators import SymbolicDatasetForSampling, TransInfSeqGenerator, GaussianDataset
 from input_embedders import GaussianEmbedderForOrdering
 from main_utils import log_att_weights
 from models import Transformer
-from definitions import WANDB_KEY
+from definitions import WANDB_KEY, COLOR_PALETTE
 from utils import MyIterableDataset
 from utils import dotdict as dd
+
+cp = sns.color_palette(COLOR_PALETTE)
 
 
 def eval_loss_and_accuracy(mod, inputs, labels, criterion, config):
@@ -30,6 +34,48 @@ def eval_loss_and_accuracy(mod, inputs, labels, criterion, config):
     else:
         predicted_labels = torch.sign(y_hat)
     accuracy = (predicted_labels == labels).float().mean()
+
+    if config.log.log_to_wandb:
+        # which of the two labels is correct
+        _, id = torch.where(inputs['label'][:, :2] == inputs['label'][:, -1].unsqueeze(1))
+        id = id * 3 + 2
+
+        # separately log accuracy when the correct label is the first or second label
+        accuracy_when_first_label = (predicted_labels == labels)[id == 2].float().mean()
+        accuracy_when_second_label = (predicted_labels == labels)[id == 5].float().mean()
+        wandb.log({'accuracy_when_first_label': accuracy_when_first_label.item()})
+        wandb.log({'accuracy_when_second_label': accuracy_when_second_label.item()})
+
+        A = out_dict['block_1']['weights'][:, :, -1]
+        attention_to_correct_label = A[torch.arange(128), :, id]
+
+        # log the attention weights to the correct label
+        wandb.log({'attention_to_correct_label': attention_to_correct_label.mean().item()})
+        # log the attention weights to the incorrect label  fixme: this is incorrect!!
+        attention_to_incorrect_label = A[torch.arange(128), :, torch.where(id==5, 2, 5)]
+        wandb.log({'attention_to_incorrect_label': attention_to_incorrect_label.mean().item()})
+
+        # log attention to first and second label
+        attention_to_first_label = A[torch.arange(128), :, 2]
+        wandb.log({'attention_to_first_label': attention_to_first_label.mean().item()})
+        attention_to_second_label = A[torch.arange(128), :, 5]
+        wandb.log({'attention_to_second_label': attention_to_second_label.mean().item()})
+
+        # log attention distribution as histogram for when "true" label is the first or second label
+        att_dist_lab1 = A[id == 2, :, :].mean(axis=0).mean(axis=0)
+        att_dist_lab2 = A[id == 5, :, :].mean(axis=0).mean(axis=0)
+
+        fig, ax = plt.subplots()
+        x = torch.arange(len(att_dist_lab1))
+        ax.bar(x - 0.2, att_dist_lab1, width=0.4, color=cp[0], align='center', label='Attention distribution when 1st label is correct')
+        ax.bar(x + 0.2, att_dist_lab2, width=0.4, color=cp[1], align='center', label='Attention distribution when 2nd label is correct')
+        ax.set_xticklabels(['', 'img', 'img', 'lab1', 'img', 'img', 'lab2', 'img', 'img'])
+        # Adding labels and title
+        plt.title('Attention distribution when first or second label is correct')
+        plt.legend()
+
+        wandb.log({"attention_distribution": wandb.Image(fig)})
+        plt.close(fig)
     return loss, accuracy, out_dict
 
 
@@ -84,11 +130,12 @@ def main(cfg, seq_type='order'):
         holdout_generator = seqgen.get_AB_BB_seqs(config.seq.shots)
         iwl_generator = seqgen.get_AB_BB_seqs(config.seq.shots)
     elif seq_type == 'ABBA':
-        train_generator = seqgen.get_AB_BA_seqs(config.seq.shots)
-        holdout_generator = seqgen.get_AB_BA_seqs(config.seq.shots)
-        iwl_generator = seqgen.get_AB_BA_seqs(config.seq.shots)
+        train_generator = seqgen.get_AB_BA_seqs(config.seq.shots, set='train')
+        holdout_generator = seqgen.get_AB_BA_seqs(config.seq.shots, set='test')
+        iwl_generator = seqgen.get_AB_BA_seqs(config.seq.shots, set='all')
     else:
         raise ValueError('Invalid sequence type: {}'.format(seq_type))
+
     iterdataset = MyIterableDataset(train_generator, holdout_generator, iwl_generator)
     dataloader = DataLoader(iterdataset, batch_size=config.train.batch_size)
 
@@ -96,7 +143,6 @@ def main(cfg, seq_type='order'):
     input_embedder = GaussianEmbedderForOrdering(config)
     model = Transformer(config=config.model, input_embedder=input_embedder).to(device)  # my custom transformer encoder
 
-    # model = MyTransformer(config, device)
     optimizer = optim.Adam(model.parameters(), lr=config.train.learning_rate, weight_decay=config.train.w_decay)
     if config.train.lr_scheduler == 'cosine':
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.train.niters, eta_min=.00001)

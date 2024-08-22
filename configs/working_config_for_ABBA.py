@@ -17,8 +17,8 @@ config = dd(dict(
         drop_p=0.2,
         pos_emb_loc='none',  # in this experiment we add position embeddings already in the embedder class
         prediction_mode='regress',
-        pos_emb_type='sinusoidal',  # in this experiment we add position embeddings already in the embedder class (sinusoidal or onehot)
-        pos_emb_randomization='per_batch',
+        pos_emb_type='onehot',  # in this experiment we add position embeddings already in the embedder class (sinusoidal or onehot)
+        pos_emb_randomization='no_shift',
         add_pos_encodings=True
     )),
     data=dd(dict(
@@ -45,11 +45,11 @@ config = dd(dict(
     )),
     train=dd(dict(
         batch_size=128,
-        learning_rate=0.00036,
+        learning_rate=0.00016,
         w_decay=7.091481879812184e-05,           # L2 regularisation parameter
         lr_scheduler='warmup_constant',
         warmup_steps=3000,
-        niters=20000
+        niters=40000
     )),
     log=dd(dict(
         log_to_wandb=True,
