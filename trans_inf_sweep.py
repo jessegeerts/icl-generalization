@@ -8,7 +8,8 @@ import math
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from configs.oneshot_config import config as default_config
+# from configs.oneshot_config import config as default_config
+from configs.config_for_ic_transinf import config as default_config
 from datasets.data_generators import SymbolicDatasetForSampling, TransInfSeqGenerator, GaussianDataset
 from input_embedders import GaussianEmbedderForOrdering
 from main_utils import log_att_weights
@@ -260,7 +261,7 @@ if __name__ == '__main__':
     }
 
     sweep_id = wandb.sweep(sweep=sweep_configuration, project="ic_transinf_sweep")
-    main = partial(main, default_config)
+    main = partial(main, cfg=default_config, seq_type='order')
     wandb.agent(sweep_id=sweep_id, function=main)
 
 
