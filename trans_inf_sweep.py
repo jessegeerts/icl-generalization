@@ -37,39 +37,33 @@ def eval_loss_and_accuracy(mod, inputs, labels, criterion, config):
 
     if config.log.log_to_wandb:
         # which of the two labels is correct
-        _, id = torch.where(inputs['label'][:, :2] == inputs['label'][:, -1].unsqueeze(1))
-        id = id * 3 + 2
-
-        # separately log accuracy when the correct label is the first or second label
-        accuracy_when_first_label = (predicted_labels == labels)[id == 2].float().mean()
-        accuracy_when_second_label = (predicted_labels == labels)[id == 5].float().mean()
-        wandb.log({'accuracy_when_first_label': accuracy_when_first_label.item()})
-        wandb.log({'accuracy_when_second_label': accuracy_when_second_label.item()})
+        # _, id = torch.where(inputs['label'][:, :-1] == inputs['label'][:, -1].unsqueeze(1))
+        #
+        # id = id * 3 + 2
 
         A = out_dict['block_1']['weights'][:, :, -1]
-        attention_to_correct_label = A[torch.arange(128), :, id]
 
-        # log the attention weights to the correct label
-        wandb.log({'attention_to_correct_label': attention_to_correct_label.mean().item()})
-        # log the attention weights to the incorrect label  fixme: this is incorrect!!
-        attention_to_incorrect_label = A[torch.arange(128), :, torch.where(id==5, 2, 5)]
-        wandb.log({'attention_to_incorrect_label': attention_to_incorrect_label.mean().item()})
+        label_matches_query = inputs['label'][:,:-1]==inputs['label'][:,-1].unsqueeze(1)
+        n_labels_in_context = label_matches_query.shape[1]
+        for i in range(n_labels_in_context):
+            accuracy_i = (predicted_labels == labels)[label_matches_query[:,i]].float().mean()
+            wandb.log({'accuracy_when_label_{}'.format(i): accuracy_i.item()})
 
-        # log attention to first and second label
-        attention_to_first_label = A[torch.arange(128), :, 2]
-        wandb.log({'attention_to_first_label': attention_to_first_label.mean().item()})
-        attention_to_second_label = A[torch.arange(128), :, 5]
-        wandb.log({'attention_to_second_label': attention_to_second_label.mean().item()})
+            # log attention to each label
+            attention_to_label = A[torch.arange(128), :, i*3+2]
+            wandb.log({'attention_to_label_{}'.format(i): attention_to_label.mean().item()})
+
 
         # log attention distribution as histogram for when "true" label is the first or second label
-        att_dist_lab1 = A[id == 2, :, :].mean(axis=0).mean(axis=0)
-        att_dist_lab2 = A[id == 5, :, :].mean(axis=0).mean(axis=0)
+        att_dist = [A[label_matches_query[:,i], :, :].mean(axis=0).mean(axis=0) for i in range(n_labels_in_context)]
+
 
         fig, ax = plt.subplots()
-        x = torch.arange(len(att_dist_lab1))
-        ax.bar(x - 0.2, att_dist_lab1, width=0.4, color=cp[0], align='center', label='Attention distribution when 1st label is correct')
-        ax.bar(x + 0.2, att_dist_lab2, width=0.4, color=cp[1], align='center', label='Attention distribution when 2nd label is correct')
-        ax.set_xticklabels(['', 'img', 'img', 'lab1', 'img', 'img', 'lab2', 'img', 'img'])
+        x = torch.arange(len(att_dist[0]))
+        for i, att_dist_i in enumerate(att_dist):
+            ax.bar(x + i * 0.2, att_dist_i, width=0.2, color=cp[i], align='center', label='Attention distribution when {}th label is correct'.format(i+1))
+        xticks =  (['img'] * 2 + ['lab']) * (config.seq.N-1) * 2 + ['img'] * 2
+        ax.set_xticks(x+.2, xticks)
         # Adding labels and title
         plt.title('Attention distribution when first or second label is correct')
         plt.legend()
@@ -261,11 +255,7 @@ if __name__ == '__main__':
             "train.w_decay": {"max": 0.0009, "min": 0.000001, "distribution": "uniform"},
             "model.n_blocks": {"max": 8, "min": 1, "distribution": "int_uniform"},
             "model.n_heads": {"values": [1, 2, 4, 8], "distribution": "categorical"},
-            "model.include_mlp": {"values": [True, False], "distribution": "categorical"},
-            "seq.shots": {"max": 4, "min": 1, "distribution": "int_uniform"},
-            "model.pos_emb_type": {"values": ["sinusoidal", "onehot"], "distribution": "categorical"},
             "train.warmup_steps": {"max": 5000, "min": 1000, "distribution": "int_uniform"},
-            "train.lr_scheduler": {"values": ["warmup_constant", "warmup_cosine", "cosine", "none"], "distribution": "categorical"},
         }
     }
 

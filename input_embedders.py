@@ -87,15 +87,17 @@ class GaussianEmbedderForOrdering(nn.Module):
     def forward(self, batch):
         examples = batch['example']
         labels = batch['label']
-        inputs = torch.zeros((self.config.train.batch_size, 3 * self.N + 2, 2 * self.Nmax + self.config.data.D))
+        seq_len = (self.N-1) * 3 * 2 + 2  # N-1 combos, 3 items per combo, 2 orderings, 2 targets
+        n_example_pairs = (self.N-1) * 2 + 1  # this includes the target
+        inputs = torch.zeros((self.config.train.batch_size, seq_len, 2 * self.Nmax + self.config.data.D))
 
         # fill every first 2 indices with class examples
         inputs[:, ::3, 2 * self.Nmax:] = \
             (self.e_fac * (self.mus_class[examples[:, ::2]] + self.config.data.eps * torch.Tensor(
-                np.random.normal(size=(self.S, self.N+1, self.D))).double() / np.sqrt(self.D)))
+                np.random.normal(size=(self.S, n_example_pairs, self.D))).double() / np.sqrt(self.D)))
         inputs[:, 1::3, 2 * self.Nmax:] = \
             (self.e_fac * (self.mus_class[examples[:, 1::2]] + self.config.data.eps * torch.Tensor(
-                np.random.normal(size=(self.S, self.N+1, self.D))).double() / np.sqrt(self.D)))
+                np.random.normal(size=(self.S, n_example_pairs, self.D))).double() / np.sqrt(self.D)))
         # fill every 3rd index with label examples
         inputs[:, 2:-2:3, 2 * self.Nmax:] = self.mus_label[labels[:, :-1]]
 
@@ -125,10 +127,10 @@ class GaussianEmbedderForOrdering(nn.Module):
 
                 if self.pos_embedding_type == 'onehot':
                     inputs[write_to_example, :,
-                    shifts[shift_choice]:shifts[shift_choice] + 3 * self.N + 2] = torch.Tensor(
-                        np.identity(3 * self.N + 2))
+                    shifts[shift_choice]:shifts[shift_choice] + seq_len] = torch.Tensor(
+                        np.identity(seq_len))
                 else:
                     inputs[write_to_example, :, :2 * self.Nmax] = self.positional_embedding[0,
                                                                   shifts[shift_choice]: shifts[
-                                                                                            shift_choice] + 3 * self.N + 2]
+                                                                                            shift_choice] + seq_len]
         return inputs
