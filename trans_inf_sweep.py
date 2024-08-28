@@ -91,7 +91,7 @@ def main(cfg, seq_type='order'):
         sweep_params = {key: value for key, value in run.config.items()}
         config = dd(update_nested_config(config, sweep_params))
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = 'cpu'  # torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     metrics = {
         'holdout_accuracy': [],
