@@ -238,6 +238,7 @@ def main(cfg, seq_type='order'):
 
 
 
+
 if __name__ == '__main__':
     import os
     from functools import partial
@@ -249,19 +250,18 @@ if __name__ == '__main__':
         os.makedirs(model_dir)
 
     sweep_configuration = {
+        "name": "transinf-icl-sweep-N={}".format(default_config.seq.ways),
         "method": "bayes",
         "metric": {"goal": "minimize", "name": "loss"},
         "parameters": {
-            "train.learning_rate": {"max": 0.00056, "min": 0.00034, "distribution": "uniform"},
+            "train.learning_rate": {"max": 0.00036, "min": 0.00004, "distribution": "uniform"},
             "train.w_decay": {"max": 0.0009, "min": 0.000001, "distribution": "uniform"},
-            "model.n_blocks": {"max": 8, "min": 1, "distribution": "int_uniform"},
-            "model.n_heads": {"values": [1, 2, 4, 8], "distribution": "categorical"},
+            # "model.n_blocks": {"max": 8, "min": 1, "distribution": "int_uniform"},
+            # "model.n_heads": {"values": [1, 2, 4, 8], "distribution": "categorical"},
             "train.warmup_steps": {"max": 5000, "min": 1000, "distribution": "int_uniform"},
         }
     }
 
     sweep_id = wandb.sweep(sweep=sweep_configuration, project="ic_transinf_sweep")
-    main = partial(main, cfg=default_config, seq_type='order')
-    wandb.agent(sweep_id=sweep_id, function=main)
 
-
+    wandb.agent(sweep_id, function=partial(main, cfg=default_config, seq_type='order'))
