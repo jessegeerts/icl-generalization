@@ -87,8 +87,12 @@ class GaussianEmbedderForOrdering(nn.Module):
     def forward(self, batch):
         examples = batch['example']
         labels = batch['label']
-        seq_len = (self.N-1) * 3 * 2 + 2  # N-1 combos, 3 items per combo, 2 orderings, 2 targets
-        n_example_pairs = (self.N-1) * 2 + 1  # this includes the target
+        if self.config.seq.include_flipped:
+            n_flips = 2
+        else:
+            n_flips = 1
+        seq_len = (self.N-1) * 3 * n_flips + 2  # N-1 combos, 3 items per combo, 2 orderings, 2 targets
+        n_example_pairs = (self.N-1) * n_flips + 1  # this includes the target
         inputs = torch.zeros((self.config.train.batch_size, seq_len, 2 * self.Nmax + self.config.data.D))
 
         # fill every first 2 indices with class examples

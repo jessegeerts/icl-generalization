@@ -875,6 +875,7 @@ class TransInfSeqGenerator:
         :return:
         """
         while True:
+            include_reverse = False
             if set == 'train':
                 classes = np.random.choice(self.train_classes, size=n_classes, replace=False)
             elif set == 'test':
@@ -889,14 +890,25 @@ class TransInfSeqGenerator:
                 id1 = i
                 id2 = (i + 1) % n_classes
                 context.append((classes[id1], classes[id2], 1 if rank[id1] < rank[id2] else -1))
-                context.append((classes[id2], classes[id1], 1 if rank[id2] < rank[id1] else -1))
+                if include_reverse:
+                    context.append((classes[id2], classes[id1], 1 if rank[id2] < rank[id1] else -1))
             # repeat the context for the number of shots
             context = context * shots
             # shuffle the context
-            np.random.shuffle(context)
+            # np.random.shuffle(context)
+            # randomly shuffle final two items in context
+            # context[-2:] = np.random.permutation(context[-2:])
+            # context[:2] = np.random.permutation(context[:2])
+            context = np.random.permutation(context)
+            # swap last two elements with first two elements (this randomizes but preserves grouping)
+            # if np.random.rand() > 0.5:
+            #     context[:2], context[-2:] = context[-2:], context[:2]
+            # make everything a tuple instead of array again
+            context = [tuple(tup) for tup in context]
             # create the query
             query = random.choice(context)
-
+            if np.random.rand() > 0.5:
+                query = (query[1], query[0], -query[2])
             # c
             examples = [element for tup in context for element in tup[:2]]
             examples.extend(query[:2])

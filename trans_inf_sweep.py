@@ -43,8 +43,8 @@ def eval_loss_and_accuracy(mod, inputs, labels, criterion, config):
         # id = id * 3 + 2
 
         A = out_dict['block_1']['weights'][:, :, -1]
-
-        label_matches_query = inputs['label'][:,:-1]==inputs['label'][:,-1].unsqueeze(1)
+        # todo: this is outdated. we can instead split on whether the query is the same item order
+        label_matches_query = inputs['label'][:, :-1]==inputs['label'][:,-1].unsqueeze(1)
         n_labels_in_context = label_matches_query.shape[1]
         for i in range(n_labels_in_context):
             accuracy_i = (predicted_labels == labels)[label_matches_query[:,i]].float().mean()
@@ -58,12 +58,15 @@ def eval_loss_and_accuracy(mod, inputs, labels, criterion, config):
         # log attention distribution as histogram for when "true" label is the first or second label
         att_dist = [A[label_matches_query[:,i], :, :].mean(axis=0).mean(axis=0) for i in range(n_labels_in_context)]
 
-
+        if config.seq.include_flipped:
+            n_flips = 2
+        else:
+            n_flips = 1
         fig, ax = plt.subplots()
         x = torch.arange(len(att_dist[0]))
         for i, att_dist_i in enumerate(att_dist):
             ax.bar(x + i * 0.2, att_dist_i, width=0.2, color=cp[i], align='center', label='Attention distribution when {}th label is correct'.format(i+1))
-        xticks =  (['img'] * 2 + ['lab']) * (config.seq.N-1) * 2 + ['img'] * 2
+        xticks =  (['img'] * 2 + ['lab']) * (config.seq.N-1) * n_flips + ['img'] * 2
         ax.set_xticks(x+.2, xticks)
         # Adding labels and title
         plt.title('Attention distribution when first or second label is correct')

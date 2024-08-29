@@ -31,7 +31,7 @@ config = dd(dict(
         D=64,                   # dimension of inputs
         subD=32,                # dimension of subvectors (for partial exposure paradigm)
         alpha=0.,               # zipf exponent
-        eps=0.75,                # within-class variance (higher => more ICL)
+        eps=0.01,                # within-class variance (higher => more ICL)
         Nmax=32,
     )),
     seq=dd(dict(
@@ -41,7 +41,8 @@ config = dd(dict(
         B=4,
         pB=1.,
         pC=1.,
-        train_seq_type='order'
+        train_seq_type='order',
+        include_flipped=False,
     )),
     train=dd(dict(
         batch_size=128,
