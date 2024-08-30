@@ -859,68 +859,78 @@ class TransInfSeqGenerator:
         # last 20% of classes are test classes
         self.test_classes = self.classes[int(0.8 * len(self.classes)):]
 
-    def get_fewshot_order_seq(self, n_classes, shots):
+    def get_fewshot_order_seq(self, n_classes, shots, query_distance=1, mode='train'):
         """Generate a sequence of examples for a few-shot ordering task. Labels
         can be 1 or -1 depending on whether the second example is greater or
         less than the first example.
         For example, for shots=1, n_classes= 3, we might have a context of :
-            a b 1 b a -1 b c 1 c b -1 c a -1 a c 1
+            a b 1 b c 1
         followed by a query pair of examples, where the label is 1 if the first
         example is less than the second, and -1 otherwise.
-
-        Note: this isn't transitive inference because it wraps around the classes.
 
         :param n_classes:
         :param shots:
         :return:
         """
-        while True:
-            include_reverse = False
-            if set == 'train':
-                classes = np.random.choice(self.train_classes, size=n_classes, replace=False)
-            elif set == 'test':
-                classes = np.random.choice(self.test_classes, size=n_classes, replace=False)
-            else:  # set == 'all'
-                classes = np.random.choice(self.classes, size=n_classes, replace=False)
+        if mode == 'train':
+            query_distance = 1
+            p_flip = 0.5  # flip the query half the time
+        elif mode == 'test':
+            if query_distance < 0:
+                query_distance = abs(query_distance)
+                p_flip = 1.
+            else:
+                p_flip = 0.0  # in test mode, we set the signed query distance
+        def generator(query_distance=query_distance):
+            while True:
+                include_reverse = False
+                if mode == 'train':
+                    classes = np.random.choice(self.train_classes, size=n_classes, replace=False)
+                elif mode == 'test':
+                    classes = np.random.choice(self.test_classes, size=n_classes, replace=False)
+                else:  # set == 'all'
+                    classes = np.random.choice(self.classes, size=n_classes, replace=False)
 
-            rank = np.arange(n_classes)
-            # create the context
-            context = []
-            for i in range(n_classes-1):
-                id1 = i
-                id2 = (i + 1) % n_classes
-                context.append((classes[id1], classes[id2], 1 if rank[id1] < rank[id2] else -1))
-                if include_reverse:
-                    context.append((classes[id2], classes[id1], 1 if rank[id2] < rank[id1] else -1))
-            # repeat the context for the number of shots
-            context = context * shots
-            # shuffle the context
-            # np.random.shuffle(context)
-            # randomly shuffle final two items in context
-            # context[-2:] = np.random.permutation(context[-2:])
-            # context[:2] = np.random.permutation(context[:2])
-            context = np.random.permutation(context)
-            # swap last two elements with first two elements (this randomizes but preserves grouping)
-            # if np.random.rand() > 0.5:
-            #     context[:2], context[-2:] = context[-2:], context[:2]
-            # make everything a tuple instead of array again
-            context = [tuple(tup) for tup in context]
-            # create the query
-            query = random.choice(context)
-            if np.random.rand() > 0.5:
-                query = (query[1], query[0], -query[2])
-            # c
-            examples = [element for tup in context for element in tup[:2]]
-            examples.extend(query[:2])
-            labels = [tup[2] for tup in context]  #
-            labels.append(query[2])
+                rank = np.arange(n_classes)
+                # create the context
+                context = []
+                for i in range(n_classes-1):
+                    id1 = i
+                    id2 = (i + 1) % n_classes
+                    context.append((classes[id1], classes[id2], 1 if id1 < id2 else -1))  # in the context, there are only adjacent pairs
+                    if include_reverse:
+                        context.append((classes[id2], classes[id1], 1 if id2 < id1 else -1))
+                # repeat the context for the number of shots
+                context = context * shots
+                # shuffle the context
+                context = np.random.permutation(context)
+                # make everything a tuple instead of array again
+                context = [tuple(tup) for tup in context]
+                # create the query
+                if query_distance == 1:
+                    query = random.choice(context)
+                else:
+                    if query_distance < n_classes:
+                        start_index = np.random.randint(0, n_classes - query_distance)
+                        query = (classes[start_index], classes[start_index + query_distance], query_distance)
+                    else:
+                        raise ValueError('query_distance must be less than n_classes')
+                # flip the query p_flip of the time
+                if np.random.rand() < p_flip:
+                    query = (query[1], query[0], -query[2])
+                # c
+                examples = [element for tup in context for element in tup[:2]]
+                examples.extend(query[:2])
+                labels = [tup[2] for tup in context]  #
+                labels.append(query[2])
 
-            record = {
-                'example': np.array(examples),
-                'label': np.array(labels)
-            }
+                record = {
+                    'example': np.array(examples),
+                    'label': np.array(labels)
+                }
 
-            yield record
+                yield record
+        return generator
 
     def get_AB_BB_seqs(self, shots):
         """Generate a sequence of examples for an even simpler task where it's AB vs BB (suggested by claudia).

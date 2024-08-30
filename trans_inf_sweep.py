@@ -7,6 +7,7 @@ import wandb
 import math
 import matplotlib.pyplot as plt
 import seaborn as sns
+from functools import partial
 
 # from configs.oneshot_config import config as default_config
 from configs.config_for_ic_transinf import config as default_config
@@ -119,8 +120,8 @@ def main(cfg, seq_type='order'):
 
     if seq_type == 'order':
         # todo: we can swap this for "in-weight" sequences with constant mapping
-        train_generator = seqgen.get_fewshot_order_seq(config.seq.ways, config.seq.shots)
-        holdout_generator = seqgen.get_fewshot_order_seq(config.seq.ways, config.seq.shots)
+        train_generator = partial(seqgen.get_fewshot_order_seq, config.seq.ways, config.seq.shots, mode='train')
+        holdout_generator = partial(seqgen.get_fewshot_order_seq, config.seq.ways, config.seq.shots, mode='test')
         # fixme: this is just a placeholder for now
         iwl_generator = seqgen.get_fewshot_order_seq(config.seq.ways, config.seq.shots)
     elif seq_type == 'ABBB':
@@ -177,14 +178,13 @@ def main(cfg, seq_type='order'):
     iterator = iter(dataloader)
     for n in range(config.train.niters):
         iterdataset.set_mode('train')
+        iterator = iter(dataloader)
         model.train()
         batch = next(iterator)
 
         optimizer.zero_grad()
 
         # for the transformer encoder, we need to reshape the input to (seq_len, batch_size, emb_dim)
-        # inputs = input_embedder(batch)
-        # inputs = inputs.permute(1, 0, 2)
         y_hat, _ = model(batch)
 
         loss = criterion(y_hat, batch['label'][:, -1].float().view(-1, 1))
@@ -201,8 +201,9 @@ def main(cfg, seq_type='order'):
                 for param_group in optimizer.param_groups:
                     wandb.log({'lr': param_group['lr'], 'iter': n})
 
-            # evaluate on holdout set
+            # evaluate on holdout set (still with adjacent pairs)
             iterdataset.set_mode('holdout')
+            iterator = iter(dataloader)
             model.eval()
             holdout_batch = next(iterator)
             holdout_loss, holdout_accuracy, out_dict_eval = eval_loss_and_accuracy(model, holdout_batch, holdout_batch['label'][:, -1].long(), criterion, config)
@@ -213,6 +214,24 @@ def main(cfg, seq_type='order'):
             metrics['loss'].append(loss.item())
             if config.save_weights:
                 log_att_weights(n, out_dict_eval, config)
+
+            # evaluate on non-adjacent pairs (dist == 2 etc )
+            for dist in range(-cfg.seq.N+1, cfg.seq.N):
+                iterdataset.set_mode('holdout', eval_distance=dist)
+                iterator = iter(dataloader)
+                model.eval()
+                holdout_batch = next(iterator)
+                y_hat, _ = model(holdout_batch)
+                predicted_labels = torch.sign(y_hat.squeeze())
+                true_label_sign = torch.sign(holdout_batch['label'][:, -1].float())
+                accuracy = (predicted_labels == true_label_sign).float().mean()
+                print(f'holdout accuracy for distance {dist}: {accuracy}')
+                output_mean = y_hat.mean()
+
+                if config.log.log_to_wandb:
+                    wandb.log({'holdout_accuracy_dist_{}'.format(dist): accuracy.item(), 'iter': n})
+                    wandb.log({'output_mean_dist_{}'.format(dist): output_mean.item(), 'iter': n})
+
 
             # calculate the induction strength of each L2 head
             # this is the difference in attention weights from the query to the correct keys - the incorrect keys
@@ -231,8 +250,8 @@ def main(cfg, seq_type='order'):
                 steps_above_criterion += 1
             else:
                 steps_above_criterion = 0
-            if steps_above_criterion == 5:
-                print('holdout accuracy maximal for 5 successive evaluations, stopping training')
+            if steps_above_criterion > config.train.steps_above_criterion:
+                print(f'holdout accuracy maximal for {steps_above_criterion} successive evaluations, stopping training')
                 break
 
     if config.log.log_to_wandb:
