@@ -337,7 +337,7 @@ if __name__ == '__main__':
         os.makedirs(model_dir)
 
     sweep_configuration = {
-        "name": "transinf-icl-sweep-N={}".format(default_config.seq.ways),
+        "name": "transinf-icl-sweep-3Sep".format(default_config.seq.ways),
         "method": "random",
         "metric": {"goal": "minimize", "name": "loss"},
         "parameters": {
