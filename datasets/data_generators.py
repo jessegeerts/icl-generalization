@@ -859,7 +859,7 @@ class TransInfSeqGenerator:
         # last 20% of classes are test classes
         self.test_classes = self.classes[int(0.8 * len(self.classes)):]
 
-    def get_fewshot_order_seq(self, n_classes, shots, query_distance=1, mode='train'):
+    def get_fewshot_order_seq(self, n_classes, shots, query_distance=1, mode='train', set_query_ranks=None):
         """Generate a sequence of examples for a few-shot ordering task. Labels
         can be 1 or -1 depending on whether the second example is greater or
         less than the first example.
@@ -881,7 +881,7 @@ class TransInfSeqGenerator:
                 p_flip = 1.
             else:
                 p_flip = 0.0  # in test mode, we set the signed query distance
-        def generator(query_distance=query_distance):
+        def generator(query_distance=query_distance, p_flip=p_flip, set_query_ranks=set_query_ranks):
             while True:
                 include_reverse = False
                 if mode == 'train':
@@ -907,14 +907,20 @@ class TransInfSeqGenerator:
                 # make everything a tuple instead of array again
                 context = [tuple(tup) for tup in context]
                 # create the query
-                if query_distance == 1:
-                    query = random.choice(context)
-                else:
-                    if query_distance < n_classes:
-                        start_index = np.random.randint(0, n_classes - query_distance)
-                        query = (classes[start_index], classes[start_index + query_distance], query_distance)
+                if set_query_ranks is None:  # randomly set the query ranks according to query_distance
+                    if query_distance == 1:
+                        query = random.choice(context)
                     else:
-                        raise ValueError('query_distance must be less than n_classes')
+                        if query_distance < n_classes:
+                            start_index = np.random.randint(0, n_classes - query_distance)
+                            query = (classes[start_index], classes[start_index + query_distance], query_distance)
+                        else:
+                            raise ValueError('query_distance must be less than n_classes')
+                else:  # set the query ranks according to set_query_ranks
+                    query_distance = set_query_ranks[1] - set_query_ranks[0]
+                    p_flip = 0.  # no flipping in this case
+                    query = (classes[set_query_ranks[0]], classes[set_query_ranks[1]], query_distance)
+
                 # flip the query p_flip of the time
                 if np.random.rand() < p_flip:
                     query = (query[1], query[0], -query[2])

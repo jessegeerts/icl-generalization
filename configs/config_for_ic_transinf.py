@@ -35,7 +35,7 @@ config = dd(dict(
         Nmax=32,
     )),
     seq=dd(dict(
-        ways=3,                  # number of classes in a few-shot task
+        ways=7,                  # number of classes in a few-shot task
         shots=1,
         N=None,  # (ways*shots) sequence length will be 3N + 2 (note this must be at least ways*shots, actually currently exactly ways*shots)
         B=4,
@@ -46,12 +46,12 @@ config = dd(dict(
     )),
     train=dd(dict(
         batch_size=128,
-        learning_rate=0.0005,
+        learning_rate=0.00005,
         w_decay=7.091481879812184e-05,           # L2 regularisation parameter
         lr_scheduler='warmup_constant',
         warmup_steps=3000,
-        niters=80000,
-        steps_above_criterion=10,
+        niters=120000,
+        steps_above_criterion=100,
     )),
     log=dd(dict(
         log_to_wandb=True,

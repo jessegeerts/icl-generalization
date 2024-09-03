@@ -8,6 +8,7 @@ import math
 import matplotlib.pyplot as plt
 import seaborn as sns
 from functools import partial
+from itertools import product
 
 # from configs.oneshot_config import config as default_config
 from configs.config_for_ic_transinf import config as default_config
@@ -100,7 +101,8 @@ def main(cfg, seq_type='order'):
     metrics = {
         'holdout_accuracy': [],
         'predictions': [],
-        'loss': []
+        'loss': [],
+        'accuracies': []
     }
 
     config.seq.N = config.seq.ways * config.seq.shots
@@ -231,6 +233,69 @@ def main(cfg, seq_type='order'):
                 if config.log.log_to_wandb:
                     wandb.log({'holdout_accuracy_dist_{}'.format(dist): accuracy.item(), 'iter': n})
                     wandb.log({'output_mean_dist_{}'.format(dist): output_mean.item(), 'iter': n})
+
+            # todo: this should be per rank because it might be different for the edge cases, for example
+            correct_matrix = torch.zeros((config.seq.N, config.seq.N))
+            pred_matrix = torch.zeros((config.seq.N, config.seq.N))
+
+            ranks = torch.arange(config.seq.N)
+            for i, j in product(ranks, ranks):
+                iterdataset.set_mode('holdout', set_query_ranks=(i, j))
+                iterator = iter(dataloader)
+                model.eval()
+                holdout_batch = next(iterator)
+                y_hat, _ = model(holdout_batch)
+                predicted_labels = torch.sign(y_hat.squeeze())
+                true_label_sign = torch.sign(holdout_batch['label'][:, -1].float())
+                accuracy = (predicted_labels == true_label_sign).float().mean()
+                output_mean = y_hat.detach().mean()
+                correct_matrix[i, j] = accuracy
+                pred_matrix[i, j] = output_mean
+
+            # Create a figure for the correct matrix
+            fig_correct = plt.figure()
+            plt.imshow(correct_matrix, cmap='hot', interpolation='nearest', vmin=0, vmax=1)
+            plt.xticks(ranks)
+            plt.yticks(ranks)
+            plt.title('Correct Matrix')
+            plt.colorbar()
+            plt.close(fig_correct)  # Close the figure to prevent it from displaying in your Python environment
+
+            # Create a figure for the pred matrix
+            fig_pred = plt.figure()
+            plt.imshow(pred_matrix, cmap='coolwarm', interpolation='nearest', vmin=-1, vmax=1)
+            plt.xticks(ranks)
+            plt.yticks(ranks)
+            plt.title('Pred Matrix')
+            plt.colorbar()
+            plt.close(fig_pred)  # Close the figure to prevent it from displaying in your Python environment
+
+            # Log the figures as images in wandb
+            if config.log.log_to_wandb:
+                wandb.log({"correct_matrix": wandb.Image(fig_correct), "pred_matrix": wandb.Image(fig_pred), 'iter': n})
+
+            # Initialize a dictionary to store the mean accuracies for each absolute distance
+            mean_accuracies = {}
+            mean_preds = {}
+            # Calculate the mean accuracy and output for each distance
+            for distance in range(-config.seq.N+1, config.seq.N):
+                # Get the elements in the diagonal at the current absolute distance
+                diagonal_elements = torch.diagonal(correct_matrix, offset=distance)
+                diagonal_pred = torch.diagonal(pred_matrix, offset=distance)
+                # Calculate the mean accuracy
+                mean_accuracy = torch.mean(diagonal_elements)
+                mean_pred = torch.mean(diagonal_pred)
+                # Store the mean accuracy in the dictionary
+                mean_accuracies[distance] = mean_accuracy
+                mean_preds[distance] = mean_pred
+
+            metrics['accuracies'].append(mean_accuracies)
+            metrics['predictions'].append(mean_preds)
+
+            for abs_distance, accuracies in mean_accuracies.items():
+                mean_accuracy = torch.mean(accuracies)
+                if config.log.log_to_wandb:
+                    wandb.log({f"mean_accuracy_distance_{abs_distance}": mean_accuracy, 'iter': n})
 
 
             # calculate the induction strength of each L2 head

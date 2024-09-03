@@ -18,11 +18,13 @@ class MyIterableDataset(IterableDataset):
         self.eval_distance = 1
         self.holdout_generator = self.holdout_generator_func(query_distance=self.eval_distance)
 
-    def set_mode(self, mode, eval_distance=1):
+    def set_mode(self, mode, eval_distance=1, set_query_ranks=None):
         self.mode = mode
         if mode == 'holdout':
             self.eval_distance = eval_distance
-            self.holdout_generator = self.holdout_generator_func(query_distance=self.eval_distance)
+            self.holdout_generator = self.holdout_generator_func(
+                query_distance=self.eval_distance,
+                set_query_ranks=set_query_ranks)
 
     def __iter__(self):
         # print(f"Mode at start of __iter__: {self.mode}")
