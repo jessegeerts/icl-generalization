@@ -23,5 +23,7 @@ if __name__ == '__main__':
         "project": "ic_transinf_sweep"
     }
 
-    sweep_id = wandb.sweep(sweep=sweep_configuration, project="ic_transinf_sweep")
+    sweep_id = wandb.sweep(sweep=sweep_configuration)
     print(f"Sweep ID: {sweep_id}")
+
+    wandb.agent(sweep_id, count=4, entity="jesse-geerts-14", project="ic_transinf_sweep")
