@@ -35,7 +35,7 @@ config = dd(dict(
         Nmax=32,
     )),
     seq=dd(dict(
-        ways=7,                  # number of classes in a few-shot task
+        ways=5,                  # number of classes in a few-shot task
         shots=1,
         N=None,  # (ways*shots) sequence length will be 3N + 2 (note this must be at least ways*shots, actually currently exactly ways*shots)
         B=4,
@@ -43,6 +43,7 @@ config = dd(dict(
         pC=1.,
         train_seq_type='order',
         include_flipped=False,
+        include_distal_in_training=False  # we train only on adjacent pairs
     )),
     train=dd(dict(
         batch_size=128,
@@ -51,12 +52,13 @@ config = dd(dict(
         lr_scheduler='warmup_constant',
         warmup_steps=3000,
         niters=120000,
-        steps_above_criterion=100,
+        steps_above_criterion=10,
     )),
     log=dd(dict(
         log_to_wandb=True,
         logging_interval=100,  # iterations
         wandb_project="in-context-trans-inf-hyperparam-search",
+        run_name=None
     )),
     save_weights=True,
     save_model=False

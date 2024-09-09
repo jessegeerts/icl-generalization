@@ -859,7 +859,7 @@ class TransInfSeqGenerator:
         # last 20% of classes are test classes
         self.test_classes = self.classes[int(0.8 * len(self.classes)):]
 
-    def get_fewshot_order_seq(self, n_classes, shots, query_distance=1, mode='train', set_query_ranks=None):
+    def get_fewshot_order_seq(self, n_classes, shots, query_distance=1, mode='train', set_query_ranks=None, train_distal=False):
         """Generate a sequence of examples for a few-shot ordering task. Labels
         can be 1 or -1 depending on whether the second example is greater or
         less than the first example.
@@ -881,11 +881,13 @@ class TransInfSeqGenerator:
                 p_flip = 1.
             else:
                 p_flip = 0.0  # in test mode, we set the signed query distance
-        def generator(query_distance=query_distance, p_flip=p_flip, set_query_ranks=set_query_ranks):
+        def generator(query_distance=query_distance, p_flip=p_flip, set_query_ranks=set_query_ranks, train_distal=train_distal, mode=mode):
             while True:
                 include_reverse = False
                 if mode == 'train':
                     classes = np.random.choice(self.train_classes, size=n_classes, replace=False)
+                    if train_distal:
+                        query_distance = np.random.randint(0, n_classes)
                 elif mode == 'test':
                     classes = np.random.choice(self.test_classes, size=n_classes, replace=False)
                 else:  # set == 'all'

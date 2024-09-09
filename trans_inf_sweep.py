@@ -39,10 +39,6 @@ def eval_loss_and_accuracy(mod, inputs, labels, criterion, config):
     accuracy = (predicted_labels == labels).float().mean()
 
     if config.log.log_to_wandb:
-        # which of the two labels is correct
-        # _, id = torch.where(inputs['label'][:, :-1] == inputs['label'][:, -1].unsqueeze(1))
-        #
-        # id = id * 3 + 2
 
         A = out_dict['block_1']['weights'][:, :, -1]
         # todo: this is outdated. we can instead split on whether the query is the same item order
@@ -89,12 +85,14 @@ def update_nested_config(config, update):
     return config
 
 
-def main(cfg, seq_type='order'):
-    config = dd(cfg.copy())
-    if cfg.log.log_to_wandb:
-        run = wandb.init(project=seq_type)
-        sweep_params = {key: value for key, value in run.config.items()}
-        config = dd(update_nested_config(config, sweep_params))
+def main():
+
+    run = wandb.init()
+    cfg = default_config.copy()
+
+    sweep_params = dict(run.config)  # Get sweep parameters from wandb
+    cfg = update_nested_config(cfg, sweep_params)  # Merge sweep params into the default config
+    cfg = dd(cfg)
 
     device = 'cpu'  # torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -105,82 +103,81 @@ def main(cfg, seq_type='order'):
         'accuracies': []
     }
 
-    config.seq.N = config.seq.ways * config.seq.shots
+    cfg.seq.N = cfg.seq.ways * cfg.seq.shots
 
-    if config.model.prediction_mode == 'classify':
-        config.model.out_dim = config.data.L
+    if cfg.model.prediction_mode == 'classify':
+        cfg.model.out_dim = cfg.data.L
     else:
-        config.model.out_dim = 1  # for regression
+        cfg.model.out_dim = 1  # for regression
 
     ### load or construct the dataset
-    if config.data.type == 'gaussian':
-        dataset = GaussianDataset(config.data.K, config.data.L, config.data.D)
+    if cfg.data.type == 'gaussian':
+        dataset = GaussianDataset(cfg.data.K, cfg.data.L, cfg.data.D)
     else:
-        dataset = SymbolicDatasetForSampling(config.data.K)
+        dataset = SymbolicDatasetForSampling(cfg.data.K)
 
     seqgen = TransInfSeqGenerator(dataset)
 
-    if seq_type == 'order':
+    if cfg.seq.seq_type == 'order':
         # todo: we can swap this for "in-weight" sequences with constant mapping
-        train_generator = partial(seqgen.get_fewshot_order_seq, config.seq.ways, config.seq.shots, mode='train')
-        holdout_generator = partial(seqgen.get_fewshot_order_seq, config.seq.ways, config.seq.shots, mode='test')
+        train_generator = partial(seqgen.get_fewshot_order_seq, cfg.seq.ways, cfg.seq.shots, mode='train', train_distal=cfg.seq.include_distal_in_training)
+        holdout_generator = partial(seqgen.get_fewshot_order_seq, cfg.seq.ways, cfg.seq.shots, mode='test')
         # fixme: this is just a placeholder for now
-        iwl_generator = seqgen.get_fewshot_order_seq(config.seq.ways, config.seq.shots)
-    elif seq_type == 'ABBB':
-        train_generator = seqgen.get_AB_BB_seqs(config.seq.shots)
-        holdout_generator = seqgen.get_AB_BB_seqs(config.seq.shots)
-        iwl_generator = seqgen.get_AB_BB_seqs(config.seq.shots)
-    elif seq_type == 'ABBA':
-        train_generator = seqgen.get_AB_BA_seqs(config.seq.shots, set='train')
-        holdout_generator = seqgen.get_AB_BA_seqs(config.seq.shots, set='test')
-        iwl_generator = seqgen.get_AB_BA_seqs(config.seq.shots, set='all')
+        iwl_generator = seqgen.get_fewshot_order_seq(cfg.seq.ways, cfg.seq.shots)
+    elif cfg.seq.seq_type == 'ABBB':
+        train_generator = seqgen.get_AB_BB_seqs(cfg.seq.shots)
+        holdout_generator = seqgen.get_AB_BB_seqs(cfg.seq.shots)
+        iwl_generator = seqgen.get_AB_BB_seqs(cfg.seq.shots)
+    elif cfg.seq.seq_type == 'ABBA':
+        train_generator = seqgen.get_AB_BA_seqs(cfg.seq.shots, set='train')
+        holdout_generator = seqgen.get_AB_BA_seqs(cfg.seq.shots, set='test')
+        iwl_generator = seqgen.get_AB_BA_seqs(cfg.seq.shots, set='all')
     else:
-        raise ValueError('Invalid sequence type: {}'.format(seq_type))
+        raise ValueError('Invalid sequence type: {}'.format(cfg.seq.seq_type))
 
     iterdataset = MyIterableDataset(train_generator, holdout_generator, iwl_generator)
-    dataloader = DataLoader(iterdataset, batch_size=config.train.batch_size)
+    dataloader = DataLoader(iterdataset, batch_size=cfg.train.batch_size)
 
     # prepare model
-    input_embedder = GaussianEmbedderForOrdering(config)
-    model = Transformer(config=config.model, input_embedder=input_embedder).to(device)  # my custom transformer encoder
+    input_embedder = GaussianEmbedderForOrdering(cfg)
+    model = Transformer(config=cfg.model, input_embedder=input_embedder).to(device)  # my custom transformer encoder
 
-    optimizer = optim.Adam(model.parameters(), lr=config.train.learning_rate, weight_decay=config.train.w_decay)
-    if config.train.lr_scheduler == 'cosine':
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.train.niters, eta_min=.00001)
-    elif config.train.lr_scheduler == 'none':
+    optimizer = optim.Adam(model.parameters(), lr=cfg.train.learning_rate, weight_decay=cfg.train.w_decay)
+    if cfg.train.lr_scheduler == 'cosine':
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.train.niters, eta_min=.00001)
+    elif cfg.train.lr_scheduler == 'none':
         scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda epoch: 1.)
-    elif config.train.lr_scheduler == 'warmup_cosine':
+    elif cfg.train.lr_scheduler == 'warmup_cosine':
         scheduler = optim.lr_scheduler.LambdaLR(
             optimizer,
-            lr_lambda=lambda step: min((step + 1) / config.train.warmup_steps, 1.0) * 0.5 * (
-                        1 + math.cos(step / config.train.niters * math.pi))
+            lr_lambda=lambda step: min((step + 1) / cfg.train.warmup_steps, 1.0) * 0.5 * (
+                        1 + math.cos(step / cfg.train.niters * math.pi))
         )
-    elif config.train.lr_scheduler == 'warmup_linear':
+    elif cfg.train.lr_scheduler == 'warmup_linear':
         scheduler = optim.lr_scheduler.LambdaLR(
             optimizer,
-            lr_lambda=lambda step: min((step + 1) / config.train.warmup_steps, 1.0) * (1 - step / config.train.niters)
+            lr_lambda=lambda step: min((step + 1) / cfg.train.warmup_steps, 1.0) * (1 - step / cfg.train.niters)
         )
-    elif config.train.lr_scheduler == 'warmup_constant':
+    elif cfg.train.lr_scheduler == 'warmup_constant':
         scheduler = optim.lr_scheduler.LambdaLR(
             optimizer,
-            lr_lambda=lambda step: min((step + 1) / config.train.warmup_steps, 1.0)
+            lr_lambda=lambda step: min((step + 1) / cfg.train.warmup_steps, 1.0)
         )
     else:
-        raise ValueError('Invalid learning rate scheduler: {}'.format(config.train.lr_scheduler))
+        raise ValueError('Invalid learning rate scheduler: {}'.format(cfg.train.lr_scheduler))
 
-    if config.model.prediction_mode == 'classify':
+    if cfg.model.prediction_mode == 'classify':
         criterion = nn.CrossEntropyLoss()
-    elif config.model.prediction_mode == 'regress':
+    elif cfg.model.prediction_mode == 'regress':
         criterion = nn.MSELoss()
     else:
-        raise ValueError('Invalid prediction mode: {}'.format(config.model.prediction_mode)
+        raise ValueError('Invalid prediction mode: {}'.format(cfg.model.prediction_mode)
                          + 'Valid options are: classify, regress')
 
     steps_above_criterion = 0
+    iterdataset.set_mode('train')
     iterator = iter(dataloader)
-    for n in range(config.train.niters):
-        iterdataset.set_mode('train')
-        iterator = iter(dataloader)
+    for n in range(cfg.train.niters):
         model.train()
         batch = next(iterator)
 
@@ -194,7 +191,7 @@ def main(cfg, seq_type='order'):
         optimizer.step()
         scheduler.step()
 
-        if n % config.log.logging_interval == 0:
+        if n % cfg.log.logging_interval == 0:
             print(f'iteration {n}, loss {loss}')
             if cfg.log.log_to_wandb:
                 # log current loss
@@ -208,14 +205,14 @@ def main(cfg, seq_type='order'):
             iterator = iter(dataloader)
             model.eval()
             holdout_batch = next(iterator)
-            holdout_loss, holdout_accuracy, out_dict_eval = eval_loss_and_accuracy(model, holdout_batch, holdout_batch['label'][:, -1].long(), criterion, config)
+            holdout_loss, holdout_accuracy, out_dict_eval = eval_loss_and_accuracy(model, holdout_batch, holdout_batch['label'][:, -1].long(), criterion, cfg)
             print(f'holdout loss: {holdout_loss}, holdout accuracy: {holdout_accuracy}')
             if cfg.log.log_to_wandb:
                 wandb.log({'holdout_loss': holdout_loss.item(), 'holdout_accuracy': holdout_accuracy.item(), 'iter': n})
             metrics['holdout_accuracy'].append(holdout_accuracy.item())
             metrics['loss'].append(loss.item())
-            if config.save_weights:
-                log_att_weights(n, out_dict_eval, config)
+            if cfg.save_weights:
+                log_att_weights(n, out_dict_eval, cfg)
 
             # evaluate on non-adjacent pairs (dist == 2 etc )
             for dist in range(-cfg.seq.N+1, cfg.seq.N):
@@ -230,15 +227,15 @@ def main(cfg, seq_type='order'):
                 print(f'holdout accuracy for distance {dist}: {accuracy}')
                 output_mean = y_hat.mean()
 
-                if config.log.log_to_wandb:
+                if cfg.log.log_to_wandb:
                     wandb.log({'holdout_accuracy_dist_{}'.format(dist): accuracy.item(), 'iter': n})
                     wandb.log({'output_mean_dist_{}'.format(dist): output_mean.item(), 'iter': n})
 
             # todo: this should be per rank because it might be different for the edge cases, for example
-            correct_matrix = torch.zeros((config.seq.N, config.seq.N))
-            pred_matrix = torch.zeros((config.seq.N, config.seq.N))
+            correct_matrix = torch.zeros((cfg.seq.N, cfg.seq.N))
+            pred_matrix = torch.zeros((cfg.seq.N, cfg.seq.N))
 
-            ranks = torch.arange(config.seq.N)
+            ranks = torch.arange(cfg.seq.N)
             for i, j in product(ranks, ranks):
                 iterdataset.set_mode('holdout', set_query_ranks=(i, j))
                 iterator = iter(dataloader)
@@ -271,14 +268,14 @@ def main(cfg, seq_type='order'):
             plt.close(fig_pred)  # Close the figure to prevent it from displaying in your Python environment
 
             # Log the figures as images in wandb
-            if config.log.log_to_wandb:
+            if cfg.log.log_to_wandb:
                 wandb.log({"correct_matrix": wandb.Image(fig_correct), "pred_matrix": wandb.Image(fig_pred), 'iter': n})
 
             # Initialize a dictionary to store the mean accuracies for each absolute distance
             mean_accuracies = {}
             mean_preds = {}
             # Calculate the mean accuracy and output for each distance
-            for distance in range(-config.seq.N+1, config.seq.N):
+            for distance in range(-cfg.seq.N+1, cfg.seq.N):
                 # Get the elements in the diagonal at the current absolute distance
                 diagonal_elements = torch.diagonal(correct_matrix, offset=distance)
                 diagonal_pred = torch.diagonal(pred_matrix, offset=distance)
@@ -294,7 +291,7 @@ def main(cfg, seq_type='order'):
 
             for abs_distance, accuracies in mean_accuracies.items():
                 mean_accuracy = torch.mean(accuracies)
-                if config.log.log_to_wandb:
+                if cfg.log.log_to_wandb:
                     wandb.log({f"mean_accuracy_distance_{abs_distance}": mean_accuracy, 'iter': n})
 
 
@@ -303,7 +300,7 @@ def main(cfg, seq_type='order'):
             calc_induction_strength = False
             if calc_induction_strength:
                 correct_ids = holdout_batch['label'][:, :-1] == holdout_batch['label'][:, -1].view(1, 128).T
-                for h in range(config.model.n_heads):
+                for h in range(cfg.model.n_heads):
                     attn_weights = out_dict_eval[f'block_1']['weights'][:, h, :, :]
                     # only get every second column, starting from the second
                     query_to_label = attn_weights[:, -1, 1::2]
@@ -315,20 +312,21 @@ def main(cfg, seq_type='order'):
                 steps_above_criterion += 1
             else:
                 steps_above_criterion = 0
-            if steps_above_criterion > config.train.steps_above_criterion:
+            if steps_above_criterion > cfg.train.steps_above_criterion:
                 print(f'holdout accuracy maximal for {steps_above_criterion} successive evaluations, stopping training')
                 break
 
-    if config.log.log_to_wandb:
-        run.finish()
+            iterdataset.set_mode('train')
+            iterator = iter(dataloader)
+
+    run.finish()
     return metrics
-
-
 
 
 if __name__ == '__main__':
     import os
     from functools import partial
+    from datetime import datetime
 
     wandb.login(key=WANDB_KEY)
 
@@ -337,20 +335,19 @@ if __name__ == '__main__':
         os.makedirs(model_dir)
 
     sweep_configuration = {
-        "name": "transinf-icl-sweep-3Sep".format(default_config.seq.ways),
+        "name": "transinf-icl-sweep-{}".format(datetime.now().strftime("%Y%m%d")),
         "method": "random",
         "metric": {"goal": "minimize", "name": "loss"},
         "parameters": {
-            "train.learning_rate": {"max": 0.00036, "min": 0.00002, "distribution": "uniform"},
-            "train.w_decay": {"max": 0.0009, "min": 0.000001, "distribution": "uniform"},
-            "model.n_blocks": {"max": 8, "min": 1, "distribution": "int_uniform"},
+            "train.learning_rate": {"max": 1e-5, "min": 1e-7, "distribution": "uniform"},
+            "train.w_decay": {"max": 1e-4, "min": 1e-7, "distribution": "uniform"},
+            "model.n_blocks": {"max": 16, "min": 2, "distribution": "int_uniform"},
             "model.n_heads": {"values": [1, 2, 4, 8], "distribution": "categorical"},
-            "train.warmup_steps": {"max": 5000, "min": 1000, "distribution": "int_uniform"},
+            "train.warmup_steps": {"max": 10000, "min": 3000, "distribution": "int_uniform"},
             "seq.ways": {"values": [2, 3, 4, 5, 6, 7, 8], "distribution": "categorical"},
-        }
+        },
+        "program": "trans_inf_sweep.py"  # Add this to point to your script
     }
 
     sweep_id = wandb.sweep(sweep=sweep_configuration, project="ic_transinf_sweep")
-    print(sweep_id)
-
-    wandb.agent(sweep_id, function=partial(main, cfg=default_config, seq_type='order'))
+    print(f"Sweep ID: {sweep_id}")
