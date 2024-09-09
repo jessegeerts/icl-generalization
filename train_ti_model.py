@@ -21,12 +21,13 @@ cp = seaborn.color_palette(COLOR_PALETTE)
 
 
 def main():
-    run = wandb.init()
+    run = wandb.init(project="ic_transinf_sweep")
     cfg = default_config.copy()
 
     sweep_params = dict(run.config)  # Get sweep parameters from wandb
     cfg = update_nested_config(cfg, sweep_params)  # Merge sweep params into the default config
     cfg = dd(cfg)
+    print(f"Config parameters: {cfg}")
 
     device = 'cpu'  # torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -52,18 +53,18 @@ def main():
 
     seqgen = TransInfSeqGenerator(dataset)
 
-    if cfg.seq.seq_type == 'order':
+    if cfg.seq.train_seq_type == 'order':
         # todo: we can swap this for "in-weight" sequences with constant mapping
         train_generator = partial(seqgen.get_fewshot_order_seq, cfg.seq.ways, cfg.seq.shots, mode='train',
                                   train_distal=cfg.seq.include_distal_in_training)
         holdout_generator = partial(seqgen.get_fewshot_order_seq, cfg.seq.ways, cfg.seq.shots, mode='test')
         # fixme: this is just a placeholder for now
         iwl_generator = seqgen.get_fewshot_order_seq(cfg.seq.ways, cfg.seq.shots)
-    elif cfg.seq.seq_type == 'ABBB':
+    elif cfg.seq.train_seq_type == 'ABBB':
         train_generator = seqgen.get_AB_BB_seqs(cfg.seq.shots)
         holdout_generator = seqgen.get_AB_BB_seqs(cfg.seq.shots)
         iwl_generator = seqgen.get_AB_BB_seqs(cfg.seq.shots)
-    elif cfg.seq.seq_type == 'ABBA':
+    elif cfg.seq.train_seq_type == 'ABBA':
         train_generator = seqgen.get_AB_BA_seqs(cfg.seq.shots, set='train')
         holdout_generator = seqgen.get_AB_BA_seqs(cfg.seq.shots, set='test')
         iwl_generator = seqgen.get_AB_BA_seqs(cfg.seq.shots, set='all')

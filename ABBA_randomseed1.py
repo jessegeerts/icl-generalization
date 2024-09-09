@@ -1,6 +1,6 @@
 import wandb
 import torch
-from trans_inf_sweep import main
+from train_ti_model import main
 import random
 import numpy as np
 from configs.working_config_for_ABBA import config

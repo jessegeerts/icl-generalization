@@ -4,7 +4,6 @@ from definitions import WANDB_KEY
 
 if __name__ == '__main__':
     from datetime import datetime
-    import json
 
     wandb.login(key=WANDB_KEY)
 
