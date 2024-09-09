@@ -1,6 +1,6 @@
 import wandb
 import torch
-from trans_inf_sweep import main
+from train_ti_model import main
 import random
 import numpy as np
 from configs.config_for_ic_transinf import config
