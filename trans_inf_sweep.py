@@ -4,6 +4,7 @@ from definitions import WANDB_KEY
 
 if __name__ == '__main__':
     from datetime import datetime
+    import json
 
     wandb.login(key=WANDB_KEY)
 
@@ -19,7 +20,8 @@ if __name__ == '__main__':
             "train.warmup_steps": {"max": 10000, "min": 3000, "distribution": "int_uniform"},
             "seq.ways": {"values": [2, 3, 4, 5, 6, 7, 8], "distribution": "categorical"},
         },
-        "program": "train_ti_model.py"  # Add this to point to your script
+        "program": "train_ti_model.py",
+        "project": "ic_transinf_sweep"
     }
 
     sweep_id = wandb.sweep(sweep=sweep_configuration, project="ic_transinf_sweep")
