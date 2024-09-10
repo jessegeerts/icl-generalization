@@ -18,6 +18,7 @@ from utils import dotdict as dd, MyIterableDataset
 from definitions import COLOR_PALETTE
 
 cp = seaborn.color_palette(COLOR_PALETTE)
+torch.set_num_threads(4)
 
 
 def main():
