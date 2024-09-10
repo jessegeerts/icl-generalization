@@ -14,6 +14,7 @@ from datasets.data_generators import GaussianDataset, SymbolicDatasetForSampling
 from input_embedders import GaussianEmbedderForOrdering
 from main_utils import log_att_weights
 from models import Transformer
+from sweep_utils import update_nested_config
 from utils import dotdict as dd, MyIterableDataset
 from definitions import COLOR_PALETTE
 
@@ -164,7 +165,7 @@ def main():
                 predicted_labels = torch.sign(y_hat.squeeze())
                 true_label_sign = torch.sign(holdout_batch['label'][:, -1].float())
                 accuracy = (predicted_labels == true_label_sign).float().mean()
-                print(f'holdout accuracy for distance {dist}: {accuracy}')
+                # print(f'holdout accuracy for distance {dist}: {accuracy}')
                 output_mean = y_hat.mean()
 
                 if cfg.log.log_to_wandb:
@@ -313,16 +314,6 @@ def eval_loss_and_accuracy(mod, inputs, labels, criterion, config):
         wandb.log({"attention_distribution": wandb.Image(fig)})
         plt.close(fig)
     return loss, accuracy, out_dict
-
-
-def update_nested_config(config, update):
-    for key, value in update.items():
-        keys = key.split('.')
-        d = config
-        for k in keys[:-1]:
-            d = d.setdefault(k, {})
-        d[keys[-1]] = value
-    return config
 
 
 if __name__ == '__main__':

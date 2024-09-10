@@ -1,6 +1,6 @@
 import wandb
 import torch
-from train_ti_model import main
+from train_ti_model_gpu import main
 import random
 import numpy as np
 from configs.oneshot_config import config

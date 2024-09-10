@@ -8,7 +8,7 @@ if __name__ == '__main__':
     wandb.login(key=WANDB_KEY)
 
     sweep_configuration = {
-        "name": "transinf-icl-sweep-{}".format(datetime.now().strftime("%Y%m%d")),
+        "name": "transinf-icl-sweep-macbook".format(datetime.now().strftime("%Y%m%d")),
         "method": "random",
         "metric": {"goal": "minimize", "name": "loss"},
         "parameters": {
@@ -19,11 +19,10 @@ if __name__ == '__main__':
             "train.warmup_steps": {"max": 10000, "min": 3000, "distribution": "int_uniform"},
             "seq.ways": {"values": [2, 3, 4, 5, 6, 7, 8], "distribution": "categorical"},
         },
-        "program": "train_ti_model.py",
-        "project": "ic_transinf_sweep"
+        "program": "train_ti_model_gpu.py",
+        "project": "ic_transinf_sweep",
+        "entity": "jesse-geerts-14"
     }
 
     sweep_id = wandb.sweep(sweep=sweep_configuration)
     print(f"Sweep ID: {sweep_id}")
-
-    wandb.agent(sweep_id, count=4, entity="jesse-geerts-14", project="ic_transinf_sweep")
