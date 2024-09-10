@@ -300,6 +300,7 @@ def eval_loss_and_accuracy(mod, inputs, labels, criterion, config):
         fig, ax = plt.subplots()
         x = torch.arange(len(att_dist[0]))
         for i, att_dist_i in enumerate(att_dist):
+            att_dist_i = att_dist_i.detach().cpu().numpy()
             ax.bar(x + i * 0.2, att_dist_i, width=0.2, color=cp[i], align='center',
                    label='Attention distribution when {}th label is correct'.format(i + 1))
         xticks = (['img'] * 2 + ['lab']) * (config.seq.N - 1) * n_flips + ['img'] * 2
