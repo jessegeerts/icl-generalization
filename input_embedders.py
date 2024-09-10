@@ -141,4 +141,4 @@ class GaussianEmbedderForOrdering(nn.Module):
                     inputs[write_to_example, :, :2 * self.Nmax] = self.positional_embedding[0,
                                                                   shifts[shift_choice]: shifts[
                                                                                             shift_choice] + seq_len]
-        return inputs
+        return inputs.to(self.device)
