@@ -70,14 +70,14 @@ class GaussianEmbedderForOrdering(nn.Module):
         self.L = config.data.L
         self.S = config.train.batch_size
         self.pos_embedding_type = config.model.pos_emb_type
+        self.device = device
         if config.model.pos_emb_type == 'sinusoidal':
-            self.positional_embedding = get_sinusoidal_positional_embeddings_2(config.model.max_T * 3, self.D)
+            self.positional_embedding = get_sinusoidal_positional_embeddings_2(config.model.max_T * 3, self.D).to(device)
 
         self.mus_label, self.mus_class, self.labels_class = self.get_mus_label_class(config.data.K, config.data.L, config.data.D)
         self.mus_label = self.mus_label.to(device)
         self.mus_class = self.mus_class.to(device)
         self.labels_class = self.labels_class.to(device)
-
 
     def get_mus_label_class(self, K, L, D):
         n_possible_labels = K
@@ -102,10 +102,10 @@ class GaussianEmbedderForOrdering(nn.Module):
         # fill every first 2 indices with class examples
         inputs[:, ::3, 2 * self.Nmax:] = \
             (self.e_fac * (self.mus_class[examples[:, ::2]] + self.config.data.eps * torch.Tensor(
-                np.random.normal(size=(self.S, n_example_pairs, self.D))).double() / np.sqrt(self.D)))
+                np.random.normal(size=(self.S, n_example_pairs, self.D))).double().to(self.device) / np.sqrt(self.D)))
         inputs[:, 1::3, 2 * self.Nmax:] = \
             (self.e_fac * (self.mus_class[examples[:, 1::2]] + self.config.data.eps * torch.Tensor(
-                np.random.normal(size=(self.S, n_example_pairs, self.D))).double() / np.sqrt(self.D)))
+                np.random.normal(size=(self.S, n_example_pairs, self.D))).double().to(self.device) / np.sqrt(self.D)))
         # fill every 3rd index with label examples
         inputs[:, 2:-2:3, 2 * self.Nmax:] = self.mus_label[labels[:, :-1]]
 
@@ -136,7 +136,7 @@ class GaussianEmbedderForOrdering(nn.Module):
                 if self.pos_embedding_type == 'onehot':
                     inputs[write_to_example, :,
                     shifts[shift_choice]:shifts[shift_choice] + seq_len] = torch.Tensor(
-                        np.identity(seq_len))
+                        np.identity(seq_len)).to(self.device)
                 else:
                     inputs[write_to_example, :, :2 * self.Nmax] = self.positional_embedding[0,
                                                                   shifts[shift_choice]: shifts[
