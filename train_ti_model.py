@@ -29,7 +29,7 @@ def main():
     cfg = dd(cfg)
     print(f"Config parameters: {cfg}")
 
-    device = 'cpu'  # torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = 'cpu'
 
     metrics = {
         'holdout_accuracy': [],
@@ -75,7 +75,7 @@ def main():
     dataloader = DataLoader(iterdataset, batch_size=cfg.train.batch_size)
 
     # prepare model
-    input_embedder = GaussianEmbedderForOrdering(cfg)
+    input_embedder = GaussianEmbedderForOrdering(cfg, device)
     model = Transformer(config=cfg.model, input_embedder=input_embedder).to(device)  # my custom transformer encoder
 
     optimizer = optim.Adam(model.parameters(), lr=cfg.train.learning_rate, weight_decay=cfg.train.w_decay)
@@ -115,8 +115,8 @@ def main():
     iterator = iter(dataloader)
     for n in range(cfg.train.niters):
         model.train()
-        batch = next(iterator)
-
+        # batch = next(iterator)
+        batch = {k: v.to(device) for k, v in next(iterator).items()}
         optimizer.zero_grad()
 
         # for the transformer encoder, we need to reshape the input to (seq_len, batch_size, emb_dim)

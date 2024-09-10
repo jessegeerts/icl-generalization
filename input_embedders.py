@@ -59,7 +59,7 @@ class GaussianEmbedderForOrdering(nn.Module):
     """A simple Gaussian embedder for the input space of the transformer model.
     Note: this inherits from nn.Module, but it doesn't have any trainable parameters.
     """
-    def __init__(self, config):
+    def __init__(self, config, device):
 
         super(GaussianEmbedderForOrdering, self).__init__()
         self.config = config
@@ -74,6 +74,10 @@ class GaussianEmbedderForOrdering(nn.Module):
             self.positional_embedding = get_sinusoidal_positional_embeddings_2(config.model.max_T * 3, self.D)
 
         self.mus_label, self.mus_class, self.labels_class = self.get_mus_label_class(config.data.K, config.data.L, config.data.D)
+        self.mus_label = self.mus_label.to(device)
+        self.mus_class = self.mus_class.to(device)
+        self.labels_class = self.labels_class.to(device)
+
 
     def get_mus_label_class(self, K, L, D):
         n_possible_labels = K

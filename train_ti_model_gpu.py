@@ -75,7 +75,7 @@ def main():
     dataloader = DataLoader(iterdataset, batch_size=cfg.train.batch_size)
 
     # prepare model
-    input_embedder = GaussianEmbedderForOrdering(cfg)
+    input_embedder = GaussianEmbedderForOrdering(cfg, device)
     model = Transformer(config=cfg.model, input_embedder=input_embedder).to(device)  # my custom transformer encoder
 
     optimizer = optim.Adam(model.parameters(), lr=cfg.train.learning_rate, weight_decay=cfg.train.w_decay)
