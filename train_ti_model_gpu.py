@@ -199,10 +199,11 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep'):
                 metrics['accuracies'].append(mean_accuracies)
                 metrics['predictions'].append(mean_preds)
 
-                for abs_distance, accuracies in mean_accuracies.items():
+                for distance, accuracies in mean_accuracies.items():
                     mean_accuracy = torch.mean(accuracies)
                     if cfg.log.log_to_wandb:
-                        wandb.log({f"mean_accuracy_distance_{abs_distance}": mean_accuracy, 'iter': n})
+                        wandb.log({f"mean_accuracy_distance_{distance}": mean_accuracy, 'iter': n})
+                        wandb.log({f"mean_pred_distance_{distance}": mean_preds[distance], 'iter': n})
 
             # calculate the induction strength of each L2 head
             # this is the difference in attention weights from the query to the correct keys - the incorrect keys
