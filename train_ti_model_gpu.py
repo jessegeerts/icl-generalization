@@ -22,9 +22,9 @@ cp = seaborn.color_palette(COLOR_PALETTE)
 torch.set_num_threads(4)
 
 
-def main():
-    run = wandb.init(project="ic_transinf_sweep")
-    cfg = default_config.copy()
+def main(config=default_config, wandb_proj='ic_transinf_sweep'):
+    run = wandb.init(project=wandb_proj)
+    cfg = config.copy()
 
     sweep_params = dict(run.config)  # Get sweep parameters from wandb
     cfg = update_nested_config(cfg, sweep_params)  # Merge sweep params into the default config
@@ -155,98 +155,60 @@ def main():
             if cfg.save_weights:
                 log_att_weights(n, out_dict_eval, cfg)
 
-            # evaluate on non-adjacent pairs (dist == 2 etc )
-            for dist in range(-cfg.seq.N + 1, cfg.seq.N):
-                iterdataset.set_mode('holdout', eval_distance=dist)
-                iterator = iter(dataloader)
-                model.eval()
-                holdout_batch =  {k: v.to(device) for k, v in next(iterator).items()}
-                y_hat, _ = model(holdout_batch)
-                predicted_labels = torch.sign(y_hat.squeeze())
-                true_label_sign = torch.sign(holdout_batch['label'][:, -1].float())
-                accuracy = (predicted_labels == true_label_sign).float().mean()
-                # print(f'holdout accuracy for distance {dist}: {accuracy}')
-                output_mean = y_hat.mean()
+            if cfg.eval_at_all_distances:
+                correct_matrix, holdout_batch, pred_matrix, ranks = eval_at_all_distances(cfg, dataloader, device,
+                                                                                          holdout_batch, iterdataset, model)
 
+                # Create a figure for the correct matrix
+                fig_correct = plt.figure()
+                plt.imshow(correct_matrix, cmap='hot', interpolation='nearest', vmin=0, vmax=1)
+                plt.xticks(ranks)
+                plt.yticks(ranks)
+                plt.title('Correct Matrix')
+                plt.colorbar()
+                plt.close(fig_correct)  # Close the figure to prevent it from displaying in your Python environment
+
+                # Create a figure for the pred matrix
+                fig_pred = plt.figure()
+                plt.imshow(pred_matrix, cmap='coolwarm', interpolation='nearest', vmin=-1, vmax=1)
+                plt.xticks(ranks)
+                plt.yticks(ranks)
+                plt.title('Pred Matrix')
+                plt.colorbar()
+                plt.close(fig_pred)  # Close the figure to prevent it from displaying in your Python environment
+
+                # Log the figures as images in wandb
                 if cfg.log.log_to_wandb:
-                    wandb.log({'holdout_accuracy_dist_{}'.format(dist): accuracy.item(), 'iter': n})
-                    wandb.log({'output_mean_dist_{}'.format(dist): output_mean.item(), 'iter': n})
+                    wandb.log({"correct_matrix": wandb.Image(fig_correct), "pred_matrix": wandb.Image(fig_pred), 'iter': n})
 
-            # todo: this should be per rank because it might be different for the edge cases, for example
-            correct_matrix = torch.zeros((cfg.seq.N, cfg.seq.N))
-            pred_matrix = torch.zeros((cfg.seq.N, cfg.seq.N))
+                # Initialize a dictionary to store the mean accuracies for each absolute distance
+                mean_accuracies = {}
+                mean_preds = {}
+                # Calculate the mean accuracy and output for each distance
+                for distance in range(-cfg.seq.N + 1, cfg.seq.N):
+                    # Get the elements in the diagonal at the current absolute distance
+                    diagonal_elements = torch.diagonal(correct_matrix, offset=distance)
+                    diagonal_pred = torch.diagonal(pred_matrix, offset=distance)
+                    # Calculate the mean accuracy
+                    mean_accuracy = torch.mean(diagonal_elements)
+                    mean_pred = torch.mean(diagonal_pred)
+                    # Store the mean accuracy in the dictionary
+                    mean_accuracies[distance] = mean_accuracy
+                    mean_preds[distance] = mean_pred
 
-            ranks = torch.arange(cfg.seq.N)
-            for i, j in product(ranks, ranks):
-                iterdataset.set_mode('holdout', set_query_ranks=(i, j))
-                iterator = iter(dataloader)
-                model.eval()
-                holdout_batch = {k: v.to(device) for k, v in next(iterator).items()}
-                y_hat, _ = model(holdout_batch)
-                predicted_labels = torch.sign(y_hat.squeeze())
-                true_label_sign = torch.sign(holdout_batch['label'][:, -1].float())
-                accuracy = (predicted_labels == true_label_sign).float().mean()
-                output_mean = y_hat.detach().mean()
-                correct_matrix[i, j] = accuracy
-                pred_matrix[i, j] = output_mean
+                metrics['accuracies'].append(mean_accuracies)
+                metrics['predictions'].append(mean_preds)
 
-            # Create a figure for the correct matrix
-            fig_correct = plt.figure()
-            plt.imshow(correct_matrix, cmap='hot', interpolation='nearest', vmin=0, vmax=1)
-            plt.xticks(ranks)
-            plt.yticks(ranks)
-            plt.title('Correct Matrix')
-            plt.colorbar()
-            plt.close(fig_correct)  # Close the figure to prevent it from displaying in your Python environment
-
-            # Create a figure for the pred matrix
-            fig_pred = plt.figure()
-            plt.imshow(pred_matrix, cmap='coolwarm', interpolation='nearest', vmin=-1, vmax=1)
-            plt.xticks(ranks)
-            plt.yticks(ranks)
-            plt.title('Pred Matrix')
-            plt.colorbar()
-            plt.close(fig_pred)  # Close the figure to prevent it from displaying in your Python environment
-
-            # Log the figures as images in wandb
-            if cfg.log.log_to_wandb:
-                wandb.log({"correct_matrix": wandb.Image(fig_correct), "pred_matrix": wandb.Image(fig_pred), 'iter': n})
-
-            # Initialize a dictionary to store the mean accuracies for each absolute distance
-            mean_accuracies = {}
-            mean_preds = {}
-            # Calculate the mean accuracy and output for each distance
-            for distance in range(-cfg.seq.N + 1, cfg.seq.N):
-                # Get the elements in the diagonal at the current absolute distance
-                diagonal_elements = torch.diagonal(correct_matrix, offset=distance)
-                diagonal_pred = torch.diagonal(pred_matrix, offset=distance)
-                # Calculate the mean accuracy
-                mean_accuracy = torch.mean(diagonal_elements)
-                mean_pred = torch.mean(diagonal_pred)
-                # Store the mean accuracy in the dictionary
-                mean_accuracies[distance] = mean_accuracy
-                mean_preds[distance] = mean_pred
-
-            metrics['accuracies'].append(mean_accuracies)
-            metrics['predictions'].append(mean_preds)
-
-            for abs_distance, accuracies in mean_accuracies.items():
-                mean_accuracy = torch.mean(accuracies)
-                if cfg.log.log_to_wandb:
-                    wandb.log({f"mean_accuracy_distance_{abs_distance}": mean_accuracy, 'iter': n})
+                for abs_distance, accuracies in mean_accuracies.items():
+                    mean_accuracy = torch.mean(accuracies)
+                    if cfg.log.log_to_wandb:
+                        wandb.log({f"mean_accuracy_distance_{abs_distance}": mean_accuracy, 'iter': n})
 
             # calculate the induction strength of each L2 head
             # this is the difference in attention weights from the query to the correct keys - the incorrect keys
             calc_induction_strength = False
             if calc_induction_strength:
-                correct_ids = holdout_batch['label'][:, :-1] == holdout_batch['label'][:, -1].view(1, 128).T
-                for h in range(cfg.model.n_heads):
-                    attn_weights = out_dict_eval[f'block_1']['weights'][:, h, :, :]
-                    # only get every second column, starting from the second
-                    query_to_label = attn_weights[:, -1, 1::2]
-                    induction_strength = query_to_label[correct_ids].mean() - query_to_label[~correct_ids].mean()
-                    if cfg.log.log_to_wandb:
-                        wandb.log({f'induction_strength_head_{h}': induction_strength.item(), 'iter': n})
+                calculate_induction_strength(cfg, holdout_batch, n, out_dict_eval)
 
             if holdout_accuracy == 1.:
                 steps_above_criterion += 1
@@ -261,6 +223,36 @@ def main():
 
     run.finish()
     return metrics
+
+
+def eval_at_all_distances(cfg, dataloader, device, holdout_batch, iterdataset, model):
+    correct_matrix = torch.zeros((cfg.seq.N, cfg.seq.N))
+    pred_matrix = torch.zeros((cfg.seq.N, cfg.seq.N))
+    ranks = torch.arange(cfg.seq.N)
+    for i, j in product(ranks, ranks):
+        iterdataset.set_mode('holdout', set_query_ranks=(i, j))
+        iterator = iter(dataloader)
+        model.eval()
+        holdout_batch = {k: v.to(device) for k, v in next(iterator).items()}
+        y_hat, _ = model(holdout_batch)
+        predicted_labels = torch.sign(y_hat.squeeze())
+        true_label_sign = torch.sign(holdout_batch['label'][:, -1].float())
+        accuracy = (predicted_labels == true_label_sign).float().mean()
+        output_mean = y_hat.detach().mean()
+        correct_matrix[i, j] = accuracy
+        pred_matrix[i, j] = output_mean
+    return correct_matrix, holdout_batch, pred_matrix, ranks
+
+
+def calculate_induction_strength(cfg, holdout_batch, n, out_dict_eval):
+    correct_ids = holdout_batch['label'][:, :-1] == holdout_batch['label'][:, -1].view(1, 128).T
+    for h in range(cfg.model.n_heads):
+        attn_weights = out_dict_eval[f'block_1']['weights'][:, h, :, :]
+        # only get every second column, starting from the second
+        query_to_label = attn_weights[:, -1, 1::2]
+        induction_strength = query_to_label[correct_ids].mean() - query_to_label[~correct_ids].mean()
+        if cfg.log.log_to_wandb:
+            wandb.log({f'induction_strength_head_{h}': induction_strength.item(), 'iter': n})
 
 
 def eval_loss_and_accuracy(mod, inputs, labels, criterion, config):
@@ -278,41 +270,41 @@ def eval_loss_and_accuracy(mod, inputs, labels, criterion, config):
         predicted_labels = torch.sign(y_hat)
     accuracy = (predicted_labels == labels).float().mean()
 
-    if config.log.log_to_wandb:
-
-        A = out_dict['block_1']['weights'][:, :, -1]
-        # todo: this is outdated. we can instead split on whether the query is the same item order
-        label_matches_query = inputs['label'][:, :-1] == inputs['label'][:, -1].unsqueeze(1)
-        n_labels_in_context = label_matches_query.shape[1]
-        for i in range(n_labels_in_context):
-            accuracy_i = (predicted_labels == labels)[label_matches_query[:, i]].float().mean()
-            wandb.log({'accuracy_when_label_{}'.format(i): accuracy_i.item()})
-
-            # log attention to each label
-            attention_to_label = A[torch.arange(128), :, i * 3 + 2]
-            wandb.log({'attention_to_label_{}'.format(i): attention_to_label.mean().item()})
-
-        # log attention distribution as histogram for when "true" label is the first or second label
-        att_dist = [A[label_matches_query[:, i], :, :].mean(axis=0).mean(axis=0) for i in range(n_labels_in_context)]
-
-        if config.seq.include_flipped:
-            n_flips = 2
-        else:
-            n_flips = 1
-        fig, ax = plt.subplots()
-        x = torch.arange(len(att_dist[0]))
-        for i, att_dist_i in enumerate(att_dist):
-            att_dist_i = att_dist_i.detach().cpu().numpy()
-            ax.bar(x + i * 0.2, att_dist_i, width=0.2, color=cp[i], align='center',
-                   label='Attention distribution when {}th label is correct'.format(i + 1))
-        xticks = (['img'] * 2 + ['lab']) * (config.seq.N - 1) * n_flips + ['img'] * 2
-        ax.set_xticks(x + .2, xticks)
-        # Adding labels and title
-        plt.title('Attention distribution when first or second label is correct')
-        plt.legend()
-
-        wandb.log({"attention_distribution": wandb.Image(fig)})
-        plt.close(fig)
+    # if config.log.log_to_wandb:
+    #
+    #     A = out_dict['block_1']['weights'][:, :, -1]
+    #     # todo: this is outdated. we can instead split on whether the query is the same item order
+    #     label_matches_query = inputs['label'][:, :-1] == inputs['label'][:, -1].unsqueeze(1)
+    #     n_labels_in_context = label_matches_query.shape[1]
+    #     for i in range(n_labels_in_context):
+    #         accuracy_i = (predicted_labels == labels)[label_matches_query[:, i]].float().mean()
+    #         wandb.log({'accuracy_when_label_{}'.format(i): accuracy_i.item()})
+    #
+    #         # log attention to each label
+    #         attention_to_label = A[torch.arange(128), :, i * 3 + 2]
+    #         wandb.log({'attention_to_label_{}'.format(i): attention_to_label.mean().item()})
+    #
+    #     # log attention distribution as histogram for when "true" label is the first or second label
+    #     att_dist = [A[label_matches_query[:, i], :, :].mean(axis=0).mean(axis=0) for i in range(n_labels_in_context)]
+    #
+    #     if config.seq.include_flipped:
+    #         n_flips = 2
+    #     else:
+    #         n_flips = 1
+    #     fig, ax = plt.subplots()
+    #     x = torch.arange(len(att_dist[0]))
+    #     for i, att_dist_i in enumerate(att_dist):
+    #         att_dist_i = att_dist_i.detach().cpu().numpy()
+    #         ax.bar(x + i * 0.2, att_dist_i, width=0.2, color=cp[i], align='center',
+    #                label='Attention distribution when {}th label is correct'.format(i + 1))
+    #     xticks = (['img'] * 2 + ['lab']) * (config.seq.N - 1) * n_flips + ['img'] * 2
+    #     ax.set_xticks(x + .2, xticks)
+    #     # Adding labels and title
+    #     plt.title('Attention distribution when first or second label is correct')
+    #     plt.legend()
+    #
+    #     wandb.log({"attention_distribution": wandb.Image(fig)})
+    #     plt.close(fig)
     return loss, accuracy, out_dict
 
 

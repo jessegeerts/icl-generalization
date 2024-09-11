@@ -5,8 +5,8 @@ config = dd(dict(
     model=dd(dict(
         pos_dim=64,
         emb_dim=64,
-        n_heads=1,
-        n_blocks=8,
+        n_heads=4,
+        n_blocks=6,
         include_mlp=False,
         activation='relu',              # activation fn for the MLP
         n_mlp_layers=None,              # TODO: make this mutable
@@ -35,7 +35,7 @@ config = dd(dict(
         Nmax=32,
     )),
     seq=dd(dict(
-        ways=5,                  # number of classes in a few-shot task
+        ways=4,                  # number of classes in a few-shot task
         shots=1,
         N=None,  # (ways*shots) sequence length will be 3N + 2 (note this must be at least ways*shots, actually currently exactly ways*shots)
         B=4,
@@ -43,14 +43,14 @@ config = dd(dict(
         pC=1.,
         train_seq_type='order',
         include_flipped=False,
-        include_distal_in_training=False  # we train only on adjacent pairs
+        include_distal_in_training=True
     )),
     train=dd(dict(
         batch_size=128,
-        learning_rate=0.00000987608117559501,
-        w_decay=0.00004325692307609201,           # L2 regularisation parameter
+        learning_rate=0.00005,
+        w_decay=7.091481879812184e-05,           # L2 regularisation parameter
         lr_scheduler='warmup_constant',
-        warmup_steps=3241,
+        warmup_steps=3000,
         niters=120000,
         steps_above_criterion=10,
     )),
@@ -58,9 +58,9 @@ config = dd(dict(
         log_to_wandb=True,
         logging_interval=100,  # iterations
         wandb_project="in-context-trans-inf-hyperparam-search",
-        run_name=None
+        run_name='train-with-distal'
     )),
-    save_weights=False,
+    save_weights=True,
     save_model=False,
     eval_at_all_distances=True
 ))
