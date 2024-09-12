@@ -7,14 +7,16 @@ import random
 import itertools
 import matplotlib.pyplot as plt
 import pandas as pd
-import seaborn as sns
+
 
 from main_utils import log_att_weights
+from sweep_utils import update_nested_config
+from utils import dotdict as dd
 from configs.trans_inf_config import config
 from models import Transformer
-from definitions import WANDB_KEY, ATTENTION_CMAP
+from definitions import WANDB_KEY
 import h5py as h5
-import jax.numpy as jnp
+
 
 wandb.login(key=WANDB_KEY)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -185,7 +187,6 @@ class TransInfSeqGen:
         return context, query, target
 
 
-
 # the function above gets the class indices. now we need to get the embeddings as a torch tensor, and return the
 # context and query appended to each other:
 def get_transitive_inference_sequence_embeddings(context, query):
@@ -193,9 +194,17 @@ def get_transitive_inference_sequence_embeddings(context, query):
     ids_seq.extend([q for q in query])
     return embeddings[ids_seq]
 
-# ------------------------- Training -------------------------
 
-def run_experiment(config):
+# ------------------------- Training -------------------------
+def run_experiment(config=config):
+
+    run = wandb.init()
+
+    sweep_params = dict(run.config)  # Get sweep parameters from wandb
+    cfg = update_nested_config(config, sweep_params)  # Merge sweep params into the default config
+    cfg = dd(cfg)
+    print(f"Config parameters: {cfg}")
+
 
     config.model.out_dim = 1
 
@@ -208,8 +217,6 @@ def run_experiment(config):
         'loss': []
     }
 
-    if config.log.log_to_wandb:
-        wandb.init(project=config.log.wandb_project, name=experiment_name, config=config)
 
     seqgen = TransInfSeqGen(config)
 
@@ -325,6 +332,7 @@ def run_experiment(config):
                     wandb.log({f"mean_accuracy_abs_distance_{abs_distance}": mean_accuracy, 'iter': n})
 
     return metrics
+
 
 if __name__ == '__main__':
     import os
