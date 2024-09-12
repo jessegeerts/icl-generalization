@@ -9,7 +9,7 @@ if __name__ == '__main__':
     sweep_configuration = {
         "name": "transinf-iwl-sweep-{}".format(datetime.now().strftime("%Y%m%d")),
         "method": "random",
-        "metric": {"goal": "minimize", "name": "loss"},
+        "metric": {"goal": "minimize", "name": "avg_loss"},
         "parameters": {
             "train.learning_rate": {"max": 1e-4, "min": 1e-7, "distribution": "uniform"},
             "train.w_decay": {"max": 1e-4, "min": 1e-7, "distribution": "uniform"},
