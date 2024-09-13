@@ -166,7 +166,7 @@ class OmniglotEmbedder(nn.Module):
         self.Nmax = config.data.Nmax
         self.N = config.seq.N
         self.L = config.data.L
-        self.label_embeddings = torch.normal(0, 1, size=(self.L, self.D)) / np.sqrt(self.D)
+        self.label_embeddings = torch.normal(0, 1, size=(self.L, self.D)) / np.sqrt(self.D).to(device)
         self.S = config.train.batch_size
         self.device = device
 
