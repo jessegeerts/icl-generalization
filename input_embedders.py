@@ -161,7 +161,7 @@ class OmniglotEmbedder(nn.Module):
         self.pos_embedding_type = config.model.pos_emb_type
         num_classes, emb_dim = embeddings.shape
         assert emb_dim == config.data.D
-        self.embeddings = embeddings
+        self.embeddings = embeddings.to(device)
         self.D = config.data.D  # dimension of the embeddings (512 in the omniglot case)
         self.Nmax = config.data.Nmax
         self.N = config.seq.N
@@ -175,7 +175,7 @@ class OmniglotEmbedder(nn.Module):
         labels = batch['label']
 
         seq_len = examples.shape[1] + labels.shape[1] - 1
-        inputs = torch.zeros((self.config.train.batch_size, seq_len, self.D + 2 * self.Nmax ))
+        inputs = torch.zeros((self.config.train.batch_size, seq_len, self.D + 2 * self.Nmax)).to(self.device)
 
         # fill every first 2 indices with class examples
         inputs[:, ::3, 2 * self.Nmax:] = self.embeddings[examples[:, ::2]]
