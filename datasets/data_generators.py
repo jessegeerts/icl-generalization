@@ -28,12 +28,6 @@ class SymbolicDatasetForSampling:
         self.example_type = 'symbolic'
 
 
-class GaussianDataset:
-    def __init__(self, K, L, D):
-        pass
-
-
-
 class CompoundDataset:
     """Class for loading compound dataset, used downstream for sampling sequences.
 

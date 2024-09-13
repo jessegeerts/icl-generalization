@@ -205,7 +205,6 @@ def run_experiment(config=config):
     cfg = dd(cfg)
     print(f"Config parameters: {cfg}")
 
-
     config.model.out_dim = 1
 
     experiment_name = f'transitive_inference_{config.seq.train_type}_{config.model.pos_emb_type}_{config.model.pos_emb_loc}'

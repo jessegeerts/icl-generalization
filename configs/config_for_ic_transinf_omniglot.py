@@ -4,7 +4,7 @@ from utils import dotdict as dd
 config = dd(dict(
     model=dd(dict(
         pos_dim=64,
-        emb_dim=64,
+        emb_dim=512,
         n_heads=1,
         n_blocks=8,
         include_mlp=False,
@@ -22,21 +22,21 @@ config = dd(dict(
         add_pos_encodings=True
     )),
     data=dd(dict(
-        type='gaussian',  # 'gaussian' or 'omniglot' or 'onehot' (to be implemented)
+        type='omniglot',  # 'gaussian' or 'omniglot' or 'onehot' (to be implemented)
         S=1603,
         n_rare_classes=1600-100-32,
         n_common_classes=32,
         n_holdout_classes=100,
         K=1602,                 # number of classes (needs to be divisible by L)
         L=2,                   # number of labels
-        D=64,                   # dimension of inputs
+        D=512,                   # dimension of inputs
         subD=32,                # dimension of subvectors (for partial exposure paradigm)
         alpha=0.,               # zipf exponent
         eps=0.01,                # within-class variance (higher => more ICL)
         Nmax=32,
     )),
     seq=dd(dict(
-        ways=5,                  # number of classes in a few-shot task
+        ways=3,                  # number of classes in a few-shot task
         shots=1,
         N=None,  # (ways*shots) sequence length will be 3N + 2 (note this must be at least ways*shots, actually currently exactly ways*shots)
         B=4,

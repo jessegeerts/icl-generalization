@@ -10,15 +10,16 @@ from torch.utils.data import DataLoader
 import wandb
 import seaborn
 from configs.config_for_ic_transinf import config as default_config
-from datasets.data_generators import GaussianDataset, SymbolicDatasetForSampling, TransInfSeqGenerator
-from input_embedders import GaussianEmbedderForOrdering
+from datasets.data_generators import SymbolicDatasetForSampling, TransInfSeqGenerator
+from input_embedders import GaussianEmbedderForOrdering, OmniglotEmbedder
 from main_utils import log_att_weights
 from models import Transformer
 from sweep_utils import update_nested_config
 from utils import dotdict as dd, MyIterableDataset
 from definitions import COLOR_PALETTE
+from plotting_utils import plot_and_log_matrix
 
-cp = seaborn.color_palette(COLOR_PALETTE)
+
 torch.set_num_threads(4)
 
 
@@ -48,10 +49,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep'):
         cfg.model.out_dim = 1  # for regression
 
     ### load or construct the dataset
-    if cfg.data.type == 'gaussian':
-        dataset = GaussianDataset(cfg.data.K, cfg.data.L, cfg.data.D)
-    else:
-        dataset = SymbolicDatasetForSampling(cfg.data.K)
+    dataset = SymbolicDatasetForSampling(cfg.data.K)
 
     seqgen = TransInfSeqGenerator(dataset)
 
@@ -77,7 +75,12 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep'):
     dataloader = DataLoader(iterdataset, batch_size=cfg.train.batch_size)
 
     # prepare model
-    input_embedder = GaussianEmbedderForOrdering(cfg, device)
+    if cfg.data.type == 'gaussian':
+        input_embedder = GaussianEmbedderForOrdering(cfg, device)
+    elif cfg.data.type == 'omniglot':
+        input_embedder = OmniglotEmbedder(cfg, device)
+    else:
+        raise ValueError('Invalid data type: {}'.format(cfg.data.type))
     model = Transformer(config=cfg.model, input_embedder=input_embedder).to(device)  # my custom transformer encoder
 
     optimizer = optim.Adam(model.parameters(), lr=cfg.train.learning_rate, weight_decay=cfg.train.w_decay)
@@ -159,27 +162,8 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep'):
                 correct_matrix, holdout_batch, pred_matrix, ranks = eval_at_all_distances(cfg, dataloader, device,
                                                                                           holdout_batch, iterdataset, model)
 
-                # Create a figure for the correct matrix
-                fig_correct = plt.figure()
-                plt.imshow(correct_matrix, cmap='hot', interpolation='nearest', vmin=0, vmax=1)
-                plt.xticks(ranks)
-                plt.yticks(ranks)
-                plt.title('Correct Matrix')
-                plt.colorbar()
-                plt.close(fig_correct)  # Close the figure to prevent it from displaying in your Python environment
-
-                # Create a figure for the pred matrix
-                fig_pred = plt.figure()
-                plt.imshow(pred_matrix, cmap='coolwarm', interpolation='nearest', vmin=-1, vmax=1)
-                plt.xticks(ranks)
-                plt.yticks(ranks)
-                plt.title('Pred Matrix')
-                plt.colorbar()
-                plt.close(fig_pred)  # Close the figure to prevent it from displaying in your Python environment
-
-                # Log the figures as images in wandb
-                if cfg.log.log_to_wandb:
-                    wandb.log({"correct_matrix": wandb.Image(fig_correct), "pred_matrix": wandb.Image(fig_pred), 'iter': n})
+                plot_and_log_matrix(cfg, correct_matrix, n, ranks, ranks, 'hot', 0, 1, 'Correct Matrix')
+                plot_and_log_matrix(cfg, pred_matrix, n, ranks, ranks, 'coolwarm', -1, 1, 'Pred Matrix')
 
                 # Initialize a dictionary to store the mean accuracies for each absolute distance
                 mean_accuracies = {}
@@ -271,41 +255,6 @@ def eval_loss_and_accuracy(mod, inputs, labels, criterion, config):
         predicted_labels = torch.sign(y_hat)
     accuracy = (predicted_labels == labels).float().mean()
 
-    # if config.log.log_to_wandb:
-    #
-    #     A = out_dict['block_1']['weights'][:, :, -1]
-    #     # todo: this is outdated. we can instead split on whether the query is the same item order
-    #     label_matches_query = inputs['label'][:, :-1] == inputs['label'][:, -1].unsqueeze(1)
-    #     n_labels_in_context = label_matches_query.shape[1]
-    #     for i in range(n_labels_in_context):
-    #         accuracy_i = (predicted_labels == labels)[label_matches_query[:, i]].float().mean()
-    #         wandb.log({'accuracy_when_label_{}'.format(i): accuracy_i.item()})
-    #
-    #         # log attention to each label
-    #         attention_to_label = A[torch.arange(128), :, i * 3 + 2]
-    #         wandb.log({'attention_to_label_{}'.format(i): attention_to_label.mean().item()})
-    #
-    #     # log attention distribution as histogram for when "true" label is the first or second label
-    #     att_dist = [A[label_matches_query[:, i], :, :].mean(axis=0).mean(axis=0) for i in range(n_labels_in_context)]
-    #
-    #     if config.seq.include_flipped:
-    #         n_flips = 2
-    #     else:
-    #         n_flips = 1
-    #     fig, ax = plt.subplots()
-    #     x = torch.arange(len(att_dist[0]))
-    #     for i, att_dist_i in enumerate(att_dist):
-    #         att_dist_i = att_dist_i.detach().cpu().numpy()
-    #         ax.bar(x + i * 0.2, att_dist_i, width=0.2, color=cp[i], align='center',
-    #                label='Attention distribution when {}th label is correct'.format(i + 1))
-    #     xticks = (['img'] * 2 + ['lab']) * (config.seq.N - 1) * n_flips + ['img'] * 2
-    #     ax.set_xticks(x + .2, xticks)
-    #     # Adding labels and title
-    #     plt.title('Attention distribution when first or second label is correct')
-    #     plt.legend()
-    #
-    #     wandb.log({"attention_distribution": wandb.Image(fig)})
-    #     plt.close(fig)
     return loss, accuracy, out_dict
 
 

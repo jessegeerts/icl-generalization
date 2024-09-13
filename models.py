@@ -78,7 +78,7 @@ class MaskedCausalAttention(nn.Module):
         self.n_heads = n_heads
         self.max_T = max_T
 
-        self.q_net = nn.Linear(h_dim, h_dim)
+        self.q_net = nn.Linear(h_dim, h_dim)  # note, embedding dim = h_dim for now
         self.k_net = nn.Linear(h_dim, h_dim)
         self.v_net = nn.Linear(h_dim, h_dim)
 
