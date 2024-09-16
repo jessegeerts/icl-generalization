@@ -869,12 +869,16 @@ class TransInfSeqGenerator:
         if mode == 'train':
             query_distance = 1
             p_flip = 0.5  # flip the query half the time
-        elif mode == 'test':
+        elif mode == 'test' and set_query_ranks is not None:
             if query_distance < 0:
                 query_distance = abs(query_distance)
                 p_flip = 1.
             else:
                 p_flip = 0.0  # in test mode, we set the signed query distance
+        elif mode == 'test' and set_query_ranks is None:
+            p_flip = 0.5
+        else:
+            raise ValueError('mode must be either "train" or "test"')
         def generator(query_distance=query_distance, p_flip=p_flip, set_query_ranks=set_query_ranks, train_distal=train_distal, mode=mode):
             while True:
                 include_reverse = False
