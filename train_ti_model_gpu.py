@@ -3,12 +3,10 @@ from functools import partial
 from itertools import product
 
 import torch
-from matplotlib import pyplot as plt
 from torch import optim as optim, nn as nn
 from torch.utils.data import DataLoader
 
 import wandb
-import seaborn
 from configs.config_for_ic_transinf import config as default_config
 from datasets.data_generators import SymbolicDatasetForSampling, TransInfSeqGenerator
 from input_embedders import GaussianEmbedderForOrdering, OmniglotEmbedder
@@ -16,7 +14,6 @@ from main_utils import log_att_weights
 from models import Transformer
 from sweep_utils import update_nested_config
 from utils import dotdict as dd, MyIterableDataset
-from definitions import COLOR_PALETTE
 from plotting_utils import plot_and_log_matrix
 
 
@@ -33,6 +30,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep'):
     print(f"Config parameters: {cfg}")
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
 
     metrics = {
         'holdout_accuracy': [],
@@ -126,8 +124,12 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep'):
 
         # for the transformer encoder, we need to reshape the input to (seq_len, batch_size, emb_dim)
         y_hat, _ = model(batch)
-
-        loss = criterion(y_hat, batch['label'][:, -1].float().view(-1, 1))
+        if cfg.model.prediction_mode == 'classify':
+            label = batch['label'][:, -1].long()
+            label[label == -1] = 0
+        else:
+            label = batch['label'][:, -1].float().view(-1, 1)
+        loss = criterion(y_hat, label)
         loss.backward()
         optimizer.step()
         scheduler.step()
@@ -146,10 +148,14 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep'):
             iterator = iter(dataloader)
             model.eval()
             holdout_batch = {k: v.to(device) for k, v in next(iterator).items()}
+            if cfg.model.prediction_mode == 'classify':
+                label = holdout_batch['label'][:, -1].long()
+                label[label == -1] = 0
+            else:
+                label = holdout_batch['label'][:, -1].float().view(-1, 1)
 
-            holdout_loss, holdout_accuracy, out_dict_eval = eval_loss_and_accuracy(model, holdout_batch,
-                                                                                   holdout_batch['label'][:, -1].long(),
-                                                                                   criterion, cfg)
+            holdout_loss, holdout_accuracy, out_dict_eval = \
+                eval_loss_and_accuracy(model, holdout_batch, label, criterion, cfg)
             print(f'holdout loss: {holdout_loss}, holdout accuracy: {holdout_accuracy}')
             if cfg.log.log_to_wandb:
                 wandb.log({'holdout_loss': holdout_loss.item(), 'holdout_accuracy': holdout_accuracy.item(), 'iter': n})
@@ -215,15 +221,26 @@ def eval_at_all_distances(cfg, dataloader, device, holdout_batch, iterdataset, m
     pred_matrix = torch.zeros((cfg.seq.N, cfg.seq.N))
     ranks = torch.arange(cfg.seq.N)
     for i, j in product(ranks, ranks):
+        if i == j:
+            continue  # only evaluate on off-diagonal elements
         iterdataset.set_mode('holdout', set_query_ranks=(i, j))
         iterator = iter(dataloader)
         model.eval()
         holdout_batch = {k: v.to(device) for k, v in next(iterator).items()}
         y_hat, _ = model(holdout_batch)
-        predicted_labels = torch.sign(y_hat.squeeze())
-        true_label_sign = torch.sign(holdout_batch['label'][:, -1].float())
-        accuracy = (predicted_labels == true_label_sign).float().mean()
-        output_mean = y_hat.detach().mean()
+        if cfg.model.prediction_mode == 'regress':
+            predicted_labels = torch.sign(y_hat.squeeze())
+            true_label_sign = torch.sign(holdout_batch['label'][:, -1].float())
+            accuracy = (predicted_labels == true_label_sign).float().mean()
+            output_mean = y_hat.detach().mean()
+        elif cfg.model.prediction_mode == 'classify':
+            predicted_labels = torch.argmax(y_hat, dim=1)
+            true_label = torch.where(holdout_batch['label'][:, -1] > 0, 1, 0)
+            accuracy = (predicted_labels == true_label).float().mean()
+            output_mean = y_hat[:, -1].detach().mean()  # mean of the "higher than" prediction
+        else:
+            raise ValueError('Invalid prediction mode: {}'.format(cfg.model.prediction_mode)
+                             + 'Valid options are: classify, regress')
         correct_matrix[i, j] = accuracy
         pred_matrix[i, j] = output_mean
     return correct_matrix, holdout_batch, pred_matrix, ranks
@@ -246,7 +263,8 @@ def eval_loss_and_accuracy(mod, inputs, labels, criterion, config):
     if config.model.prediction_mode == 'regress':
         labels = labels.float()
         labels[labels == 0] = -1
-        y_hat = y_hat.squeeze()
+    elif config.model.prediction_mode == 'classify':
+        labels[labels == -1] = 0
 
     loss = criterion(y_hat, labels)
     if config.model.prediction_mode == 'classify':
