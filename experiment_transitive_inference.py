@@ -292,7 +292,7 @@ def run_experiment(config=config):
 
             # Create a figure for the pred matrix
             fig_pred = plt.figure()
-            plt.imshow(pred_matrix, cmap='hot', interpolation='nearest')
+            plt.imshow(pred_matrix, cmap='coolwarm', interpolation='nearest', vmin=-1, vmax=1)
             plt.title('Pred Matrix')
             plt.colorbar()
             plt.close(fig_pred)  # Close the figure to prevent it from displaying in your Python environment
@@ -321,7 +321,7 @@ def run_experiment(config=config):
             metrics['predictions'].append(mean_preds)
 
             # Calculate and log the mean accuracy for each absolute distance
-            for abs_distance, accuracies in mean_accuracies.items():
+            for distance, accuracies in mean_accuracies.items():
                 mean_accuracy = np.mean(accuracies)
                 if config.log.log_to_wandb:
                     wandb.log({f"mean_accuracy_distance_{distance}": mean_accuracy, 'iter': n})
