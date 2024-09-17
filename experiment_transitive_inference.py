@@ -313,11 +313,7 @@ def run_experiment(config=config):
                 mean_accuracy = np.mean(diagonal_elements)
                 mean_pred = np.mean(diagonal_pred)
                 # Store the mean accuracy in the dictionary
-                abs_distance = abs(distance)
-                if abs_distance not in mean_accuracies:
-                    mean_accuracies[abs_distance] = mean_accuracy
-                else:
-                    mean_accuracies[abs_distance] = (mean_accuracies[abs_distance] + mean_accuracy) / 2
+                mean_accuracies[distance] = mean_accuracy
                 # store the mean prediction in the dictionary (by distance, not absolute distance)
                 mean_preds[distance] = mean_pred
 
@@ -328,7 +324,13 @@ def run_experiment(config=config):
             for abs_distance, accuracies in mean_accuracies.items():
                 mean_accuracy = np.mean(accuracies)
                 if config.log.log_to_wandb:
-                    wandb.log({f"mean_accuracy_abs_distance_{abs_distance}": mean_accuracy, 'iter': n})
+                    wandb.log({f"mean_accuracy_distance_{distance}": mean_accuracy, 'iter': n})
+
+            # Calculate and log the mean prediction for each distance\
+            for distance, preds in mean_preds.items():
+                mean_pred = np.mean(preds)
+                if config.log.log_to_wandb:
+                    wandb.log({f"mean_prediction_distance_{distance}": mean_pred, 'iter': n})
 
     return metrics
 
