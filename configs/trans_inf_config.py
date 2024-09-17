@@ -21,15 +21,15 @@ config = dd(dict(
         K=1623
     )),
     seq=dd(dict(
-        N=5,                        # number of examples in the sequence
+        N=7,                        # number of examples in the sequence
         repeats=1,
         train_type='IW',            # type of training sequence (IW or IC)
     )),
     train=dd(dict(
         batch_size=1,
-        learning_rate=.0001,
+        learning_rate=.00001,
         w_decay=1e-5,           # L2 regularisation parameter. note the torch implementation is a bit different from reddy jax code (it's multiplied by LR, so divide by LR to get desired w_decay param )
-        niters=3000
+        niters=5000
     )),
     log=dd(dict(
         log_to_wandb=True,
