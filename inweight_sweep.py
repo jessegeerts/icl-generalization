@@ -8,7 +8,7 @@ if __name__ == '__main__':
 
     sweep_configuration = {
         "name": "transinf-iwl-sweep-{}".format(datetime.now().strftime("%Y%m%d")),
-        "method": "bayesian",
+        "method": "bayes",
         "metric": {"goal": "minimize", "name": "avg_loss"},
         "parameters": {
             "train.learning_rate": {"max": 1e-4, "min": 1e-7, "distribution": "uniform"},
