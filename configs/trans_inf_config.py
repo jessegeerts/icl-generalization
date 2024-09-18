@@ -15,7 +15,8 @@ config = dd(dict(
         out_dim=None,                   # note this is set later (dependent on N labels in data)
         drop_p=0.1,                     # dropout probability
         pos_emb_type='sinusoidal',          # type of position embedding
-        pos_emb_loc='append'               # add or append to token embeddings
+        pos_emb_loc='append',               # add or append to token embeddings
+        prediction_mode = 'regress'
     )),
     data=dd(dict(
         K=1623

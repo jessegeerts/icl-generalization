@@ -43,6 +43,7 @@ config = dd(dict(
         pB=1.,
         pC=1.,
         train_seq_type='order',
+        train_type = 'IC',
         include_flipped=False,
         include_distal_in_training=False  # we train only on adjacent pairs
     )),
