@@ -13,7 +13,7 @@ if __name__ == '__main__':
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    metrics = main(config=config, wandb_proj="in-context-TI-omniglot")
+    metrics = main(config=config, wandb_proj="in-context-TI-omniglot-metrics")
 
     acc_df = pd.DataFrame(metrics['accuracies']).rename(
         columns={d: f'mean_accuracy_at_abs(distance)_{d}' for d in metrics['accuracies'][0].keys()})
