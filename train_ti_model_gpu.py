@@ -183,8 +183,8 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep'):
                     mean_accuracy = torch.mean(diagonal_elements)
                     mean_pred = torch.mean(diagonal_pred)
                     # Store the mean accuracy in the dictionary
-                    mean_accuracies[distance] = mean_accuracy
-                    mean_preds[distance] = mean_pred
+                    mean_accuracies[distance] = mean_accuracy.item()
+                    mean_preds[distance] = mean_pred.item()
 
                 metrics['accuracies'].append(mean_accuracies)
                 metrics['predictions'].append(mean_preds)
