@@ -217,7 +217,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep'):
     return metrics
 
 
-def eval_at_all_distances(cfg, dataloader, device, holdout_batch, iterdataset, model, iter):
+def eval_at_all_distances(cfg, dataloader, device, holdout_batch, iterdataset, model, n):
     correct_matrix = torch.zeros((cfg.seq.N, cfg.seq.N))
     pred_matrix = torch.zeros((cfg.seq.N, cfg.seq.N))
     ranks = torch.arange(cfg.seq.N)
@@ -245,8 +245,8 @@ def eval_at_all_distances(cfg, dataloader, device, holdout_batch, iterdataset, m
 
         # log the accuracy and output mean
         if cfg.log.log_to_wandb:
-            wandb.log({f'accuracy_{i}_{j}': accuracy.item(), 'iter': iter})
-            wandb.log({f'output_mean_{i}_{j}': output_mean.item(), 'iter': iter})
+            wandb.log({f'accuracy_{i}_{j}': accuracy.item(), 'iter': n})
+            wandb.log({f'output_mean_{i}_{j}': output_mean.item(), 'iter': n})
         correct_matrix[i, j] = accuracy
         pred_matrix[i, j] = output_mean
     return correct_matrix, holdout_batch, pred_matrix, ranks
