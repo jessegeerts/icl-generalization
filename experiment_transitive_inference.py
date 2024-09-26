@@ -7,7 +7,8 @@ import random
 import itertools
 import matplotlib.pyplot as plt
 import pandas as pd
-
+import os
+from definitions import ROOT_FOLDER
 
 from main_utils import log_att_weights
 from sweep_utils import update_nested_config
@@ -23,7 +24,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # ------------------------- Data -------------------------
 # load the data
-embeddings_file = 'datasets/omniglot_resnet18_randomized_order_s0.h5'
+embeddings_file = os.path.join(ROOT_FOLDER, 'datasets/omniglot_resnet18_randomized_order_s0.h5')
 with h5.File(embeddings_file, 'r') as f:
     embeddings = torch.Tensor(np.array(f['resnet18/224/feat']))
 
@@ -198,6 +199,9 @@ def get_transitive_inference_sequence_embeddings(context, query):
 # ------------------------- Training -------------------------
 def run_experiment(config=config):
 
+    pred_matrix = None
+    correct_matrix = None
+
     run = wandb.init()
 
     sweep_params = dict(run.config)  # Get sweep parameters from wandb
@@ -209,7 +213,6 @@ def run_experiment(config=config):
         cfg.model.out_dim = cfg.data.L
     else:
         cfg.model.out_dim = 1  # for regression
-
 
     experiment_name = f'transitive_inference_{config.seq.train_type}_{config.model.pos_emb_type}_{config.model.pos_emb_loc}'
 
@@ -275,7 +278,10 @@ def run_experiment(config=config):
             ranks = np.arange(seqgen.N)
             for i, j in itertools.product(ranks, ranks):
                 query = (seqgen.fixed_classes[i], seqgen.fixed_classes[j])
-                context = seqgen.get_random_context()
+                if config.seq.random_context_for_IW:
+                    context = seqgen.get_random_context()
+                else:
+                    context = []
                 inputs = get_transitive_inference_sequence_embeddings(context, query)
                 target = 0 if i == j else 1 if i < j else -1
                 inputs = inputs.unsqueeze(0).to(device)
@@ -336,7 +342,7 @@ def run_experiment(config=config):
                 if config.log.log_to_wandb:
                     wandb.log({f"mean_prediction_distance_{distance}": mean_pred, 'iter': n})
 
-    return metrics
+    return metrics, pred_matrix, correct_matrix, model, seqgen.fixed_classes
 
 
 if __name__ == '__main__':
@@ -350,17 +356,30 @@ if __name__ == '__main__':
         print(f'Running experiment {i}')
         print('-----------------------------------')
         save_dir = f'results/{config.seq.train_type}'
+        if not config.seq.random_context_for_IW:
+            save_dir += '_no_random_context'
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         if os.path.exists(os.path.join(save_dir, f'metrics_run_{i}.csv')):
+            print(f'Experiment {i} already run. Skipping...')
             continue
 
-        metrics = run_experiment(config)
+        metrics, pred_matrix, correct_matrix, model, ranked_examples = run_experiment(config)
+        # save checkpoint
+        torch.save(model.state_dict(), os.path.join(save_dir, f'model_run_{i}.pt'))
+        # save metrics
         all_metrics.append(metrics)
+        # save which were the fixed classes
+        np.save(os.path.join(save_dir, f'fixed_classes_run_{i}.npy'), ranked_examples)
 
         acc_df = pd.DataFrame(metrics['accuracies']).rename(columns={d: f'mean_accuracy_at_abs(distance)_{d}' for d in metrics['accuracies'][0].keys()})
         pred_df = pd.DataFrame(metrics['predictions']).rename(columns={d: f'mean_prediction_at_distance_{d}' for d in metrics['predictions'][0].keys()})
+        loss_df = pd.DataFrame(metrics['loss'], columns=['loss'])
 
-        metrics_df = pd.concat([acc_df, pred_df], axis=1).assign(run=i)
+        metrics_df = pd.concat([acc_df, pred_df, loss_df], axis=1).assign(run=i)
         metrics_df.to_csv(os.path.join(save_dir, f'metrics_run_{i}.csv'), index=False)
+
+        # Save pred and correct matrices
+        np.save(os.path.join(save_dir, f'pred_matrix_run_{i}.npy'), pred_matrix)
+        np.save(os.path.join(save_dir, f'correct_matrix_run_{i}.npy'), correct_matrix)
 

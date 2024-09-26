@@ -22,9 +22,10 @@ config = dd(dict(
         K=1623
     )),
     seq=dd(dict(
-        N=7,                        # number of examples in the sequence
+        N=5,                        # number of examples in the sequence
         repeats=1,
         train_type='IW',            # type of training sequence (IW or IC)
+        random_context_for_IW=False,
     )),
     train=dd(dict(
         batch_size=1,
@@ -38,5 +39,5 @@ config = dd(dict(
         wandb_project="TransitiveInference",
     )),
     save_weights=True,  # save attention weights for logging purposes
-    save_model=False    # save model weights for later reuse
+    save_model=True    # save model weights for later reuse
 ))

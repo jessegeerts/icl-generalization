@@ -239,8 +239,9 @@ class Transformer(nn.Module):
             self.positional_embedding = get_sinusoidal_positional_embeddings_2(max_T, emb_dim)
         self.pos_emb_loc = pos_emb_loc  # add or append to token embeddings
 
-    def forward(self, x, save_weights=False, apply_embedder=True):
+    def forward(self, x, save_weights=False, save_hidden_activations=False, apply_embedder=True):
         out_dict = {}
+        hidden_activations = []
         # embed inputs, if required
         if self.input_embedder is None or not apply_embedder:
             h = x
@@ -260,6 +261,12 @@ class Transformer(nn.Module):
             h, out = block(h, index=index, save_weights=save_weights)
             if save_weights:
                 out_dict[f'block_{index}'] = out
+            if save_hidden_activations:
+                hidden_activations.append(h.clone())  # Save a copy of the hidden activation
+
+        if save_hidden_activations:
+            out_dict['hidden_activations'] = hidden_activations
+
         # finally, predict the logits
         pred = self.proj_head(h)
 

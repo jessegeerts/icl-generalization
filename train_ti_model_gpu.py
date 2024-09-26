@@ -166,7 +166,8 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep'):
 
             if cfg.eval_at_all_distances:
                 correct_matrix, holdout_batch, pred_matrix, ranks = eval_at_all_distances(cfg, dataloader, device,
-                                                                                          holdout_batch, iterdataset, model)
+                                                                                          holdout_batch, iterdataset,
+                                                                                          model, n)
 
                 plot_and_log_matrix(cfg, correct_matrix, n, ranks, ranks, 'hot', 0, 1, 'Correct Matrix')
                 plot_and_log_matrix(cfg, pred_matrix, n, ranks, ranks, 'coolwarm', -1, 1, 'Pred Matrix')
@@ -216,7 +217,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep'):
     return metrics
 
 
-def eval_at_all_distances(cfg, dataloader, device, holdout_batch, iterdataset, model):
+def eval_at_all_distances(cfg, dataloader, device, holdout_batch, iterdataset, model, iter):
     correct_matrix = torch.zeros((cfg.seq.N, cfg.seq.N))
     pred_matrix = torch.zeros((cfg.seq.N, cfg.seq.N))
     ranks = torch.arange(cfg.seq.N)
@@ -241,6 +242,11 @@ def eval_at_all_distances(cfg, dataloader, device, holdout_batch, iterdataset, m
         else:
             raise ValueError('Invalid prediction mode: {}'.format(cfg.model.prediction_mode)
                              + 'Valid options are: classify, regress')
+
+        # log the accuracy and output mean
+        if cfg.log.log_to_wandb:
+            wandb.log({f'accuracy_{i}_{j}': accuracy.item(), 'iter': iter})
+            wandb.log({f'output_mean_{i}_{j}': output_mean.item(), 'iter': iter})
         correct_matrix[i, j] = accuracy
         pred_matrix[i, j] = output_mean
     return correct_matrix, holdout_batch, pred_matrix, ranks
