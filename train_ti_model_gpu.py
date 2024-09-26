@@ -1,6 +1,7 @@
 import math
 from functools import partial
 from itertools import product
+import os
 
 import torch
 from torch import optim as optim, nn as nn
@@ -190,10 +191,9 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep'):
                 metrics['accuracies'].append(mean_accuracies)
                 metrics['predictions'].append(mean_preds)
 
-                for distance, accuracies in mean_accuracies.items():
-                    mean_accuracy = torch.mean(accuracies)
+                for distance, accuracy in mean_accuracies.items():
                     if cfg.log.log_to_wandb:
-                        wandb.log({f"mean_accuracy_distance_{distance}": mean_accuracy, 'iter': n})
+                        wandb.log({f"mean_accuracy_distance_{distance}": accuracy, 'iter': n})
                         wandb.log({f"mean_pred_distance_{distance}": mean_preds[distance], 'iter': n})
 
             # calculate the induction strength of each L2 head
@@ -212,6 +212,13 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep'):
 
             iterdataset.set_mode('train')
             iterator = iter(dataloader)
+
+        if cfg.save_model and n % cfg.log.checkpoint_interval == 0:
+            checkpoint_folder = os.path.join(cfg.log.checkpoint_dir, run.project, run.id)
+            if not os.path.exists(checkpoint_folder):
+                os.makedirs(checkpoint_folder)
+            model_path = os.path.join(checkpoint_folder, f"model_{n}.pt")
+            torch.save(model.state_dict(), model_path)
 
     run.finish()
     return metrics

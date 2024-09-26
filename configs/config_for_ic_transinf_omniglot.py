@@ -59,6 +59,8 @@ config = dd(dict(
     log=dd(dict(
         log_to_wandb=True,
         logging_interval=100,  # iterations
+        checkpoint_interval=2000,  # iterations
+        checkpoint_dir='models/ic_omniglot',
         wandb_project="in-context-trans-inf-hyperparam-search",
         run_name=None
     )),
