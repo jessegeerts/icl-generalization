@@ -37,7 +37,7 @@ config = dd(dict(
     )),
     seq=dd(dict(
         ways=5,                  # number of classes in a few-shot task
-        shots=1,
+        shots=2,
         N=None,  # (ways*shots) sequence length will be 3N + 2 (note this must be at least ways*shots, actually currently exactly ways*shots)
         B=4,
         pB=1.,
@@ -53,13 +53,13 @@ config = dd(dict(
         w_decay=0.00000279305330027272,           # L2 regularisation parameter
         lr_scheduler='warmup_constant',
         warmup_steps=4602,
-        niters=120000,
+        niters=250000,
         steps_above_criterion=10,
     )),
     log=dd(dict(
         log_to_wandb=True,
-        logging_interval=100,  # iterations
-        checkpoint_interval=2000,  # iterations
+        logging_interval=2000,  # iterations
+        checkpoint_interval=4000,  # iterations
         checkpoint_dir='models/ic_omniglot',
         wandb_project="in-context-trans-inf-hyperparam-search",
         run_name=None

@@ -37,7 +37,7 @@ config = dd(dict(
     )),
     seq=dd(dict(
         ways=5,                  # number of classes in a few-shot task
-        shots=1,
+        shots=2,
         N=None,  # (ways*shots) sequence length will be 3N + 2 (note this must be at least ways*shots, actually currently exactly ways*shots)
         B=4,
         pB=1.,
@@ -57,7 +57,8 @@ config = dd(dict(
     )),
     log=dd(dict(
         log_to_wandb=True,
-        logging_interval=100,  # iterations
+        logging_interval=3000,  # iterations
+        checkpoint_interval=4000,  # iterations
         wandb_project="in-context-trans-inf-hyperparam-search",
         run_name=None
     )),

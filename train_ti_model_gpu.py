@@ -177,7 +177,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep'):
                 mean_accuracies = {}
                 mean_preds = {}
                 # Calculate the mean accuracy and output for each distance
-                for distance in range(-cfg.seq.N + 1, cfg.seq.N):
+                for distance in range(-cfg.seq.ways + 1, cfg.seq.ways):
                     # Get the elements in the diagonal at the current absolute distance
                     diagonal_elements = torch.diagonal(correct_matrix, offset=distance)
                     diagonal_pred = torch.diagonal(pred_matrix, offset=distance)
@@ -225,9 +225,9 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep'):
 
 
 def eval_at_all_distances(cfg, dataloader, device, holdout_batch, iterdataset, model, n):
-    correct_matrix = torch.zeros((cfg.seq.N, cfg.seq.N))
-    pred_matrix = torch.zeros((cfg.seq.N, cfg.seq.N))
-    ranks = torch.arange(cfg.seq.N)
+    correct_matrix = torch.zeros((cfg.seq.ways, cfg.seq.ways))
+    pred_matrix = torch.zeros((cfg.seq.ways, cfg.seq.ways))
+    ranks = torch.arange(cfg.seq.ways)
     for i, j in product(ranks, ranks):
         if i == j:
             continue  # only evaluate on off-diagonal elements
