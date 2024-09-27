@@ -218,6 +218,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep'):
             if not os.path.exists(checkpoint_folder):
                 os.makedirs(checkpoint_folder)
             model_path = os.path.join(checkpoint_folder, f"model_{n}.pt")
+            print(f"Saving model to {model_path}")
             torch.save(model.state_dict(), model_path)
 
     run.finish()
