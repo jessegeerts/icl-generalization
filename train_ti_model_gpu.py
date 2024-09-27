@@ -290,4 +290,4 @@ def eval_loss_and_accuracy(mod, inputs, labels, criterion, config):
 
 
 if __name__ == '__main__':
-    main()
+    main(wandb_proj='in-context-gauss-forpaper')
