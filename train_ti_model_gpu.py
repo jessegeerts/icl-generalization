@@ -225,10 +225,12 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep'):
     return metrics
 
 
-def eval_at_all_distances(cfg, dataloader, device, holdout_batch, iterdataset, model, n):
+def eval_at_all_distances(cfg, dataloader, device, iterdataset, model, n):
+    holdout_batch = None
     correct_matrix = torch.zeros((cfg.seq.ways, cfg.seq.ways))
     pred_matrix = torch.zeros((cfg.seq.ways, cfg.seq.ways))
     ranks = torch.arange(cfg.seq.ways)
+    model_activations = []
     for i, j in product(ranks, ranks):
         if i == j:
             continue  # only evaluate on off-diagonal elements
@@ -236,7 +238,8 @@ def eval_at_all_distances(cfg, dataloader, device, holdout_batch, iterdataset, m
         iterator = iter(dataloader)
         model.eval()
         holdout_batch = {k: v.to(device) for k, v in next(iterator).items()}
-        y_hat, _ = model(holdout_batch)
+        y_hat, out_dict = model(holdout_batch, save_hidden_activations=True)
+        model_activations.append(out_dict)
         if cfg.model.prediction_mode == 'regress':
             predicted_labels = torch.sign(y_hat.squeeze())
             true_label_sign = torch.sign(holdout_batch['label'][:, -1].float())
@@ -257,7 +260,7 @@ def eval_at_all_distances(cfg, dataloader, device, holdout_batch, iterdataset, m
             wandb.log({f'output_mean_{i}_{j}': output_mean.item(), 'iter': n})
         correct_matrix[i, j] = accuracy
         pred_matrix[i, j] = output_mean
-    return correct_matrix, holdout_batch, pred_matrix, ranks
+    return correct_matrix, holdout_batch, pred_matrix, ranks, model_activations
 
 
 def calculate_induction_strength(cfg, holdout_batch, n, out_dict_eval):

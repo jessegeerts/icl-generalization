@@ -348,7 +348,7 @@ def run_experiment(config=config):
 if __name__ == '__main__':
     import os
 
-    n_runs = 40
+    n_runs = 6
     all_metrics = []
     for i in range(n_runs):
         torch.manual_seed(i)

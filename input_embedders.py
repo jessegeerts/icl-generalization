@@ -4,7 +4,8 @@ import numpy as np
 from datasets.gauss_datasets import get_mus_label_class
 from models import get_sinusoidal_positional_embeddings_2
 import h5py as h5
-
+import os
+from definitions import ROOT_FOLDER
 
 class GaussianEmbedder(nn.Module):
     """A simple Gaussian embedder for the input space of the transformer model.
@@ -153,7 +154,7 @@ class OmniglotEmbedder(nn.Module):
         super(OmniglotEmbedder, self).__init__()
         self.config = config
         # embedidngs are stored in a file. this class simply reads them
-        embeddings_file = 'datasets/omniglot_resnet18_randomized_order_s0.h5'
+        embeddings_file = os.path.join(ROOT_FOLDER, 'datasets/omniglot_resnet18_randomized_order_s0.h5')
         with h5.File(embeddings_file, 'r') as f:
             embeddings = torch.Tensor(np.array(f['resnet18/224/feat']))
         # we only take the first exemplar from each class, for now
