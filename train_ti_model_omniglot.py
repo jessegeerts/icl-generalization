@@ -15,14 +15,13 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     args = parser.parse_args()
 
-
     save_dir = f'results/{config.seq.train_type}'
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
     # fix random seed with argparse
 
-    metrics = main(config=config, wandb_proj="in-context-TI-omniglot-forpaper")
+    metrics = main(config=config, wandb_proj="in-context-TI-omniglot-forpaper", seed=args.seed)
 
     acc_df = pd.DataFrame(metrics['accuracies']).rename(
         columns={d: f'mean_accuracy_at_abs(distance)_{d}' for d in metrics['accuracies'][0].keys()})
