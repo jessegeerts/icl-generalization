@@ -15,10 +15,6 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     args = parser.parse_args()
 
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(args.seed)  # If using CUDA
 
     save_dir = f'results/{config.seq.train_type}'
     if not os.path.exists(save_dir):

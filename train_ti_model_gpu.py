@@ -6,6 +6,7 @@ import os
 import torch
 from torch import optim as optim, nn as nn
 from torch.utils.data import DataLoader
+import numpy as np
 
 import wandb
 from configs.config_for_ic_transinf import config as default_config
@@ -21,8 +22,16 @@ from plotting_utils import plot_and_log_matrix
 torch.set_num_threads(4)
 
 
-def main(config=default_config, wandb_proj='ic_transinf_sweep'):
-    run = wandb.init(project=wandb_proj)
+def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
+
+    # set random seed
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)  # If using CUDA
+
+    seed_config = {'seed': seed}
+    run = wandb.init(project=wandb_proj, config=seed_config)
     cfg = config.copy()
 
     sweep_params = dict(run.config)  # Get sweep parameters from wandb
