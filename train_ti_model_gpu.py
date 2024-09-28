@@ -176,7 +176,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
 
             if cfg.eval_at_all_distances:
                 correct_matrix, holdout_batch, pred_matrix, ranks = eval_at_all_distances(cfg, dataloader, device,
-                                                                                          holdout_batch, iterdataset,
+                                                                                          iterdataset,
                                                                                           model, n)
 
                 plot_and_log_matrix(cfg, correct_matrix, n, ranks, ranks, 'hot', 0, 1, 'Correct Matrix')
@@ -234,7 +234,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
     return metrics
 
 
-def eval_at_all_distances(cfg, dataloader, device, iterdataset, model, n):
+def eval_at_all_distances(cfg, dataloader, device, iterdataset, model, n, get_hiddens=False):
     holdout_batch = None
     correct_matrix = torch.zeros((cfg.seq.ways, cfg.seq.ways))
     pred_matrix = torch.zeros((cfg.seq.ways, cfg.seq.ways))
@@ -247,7 +247,7 @@ def eval_at_all_distances(cfg, dataloader, device, iterdataset, model, n):
         iterator = iter(dataloader)
         model.eval()
         holdout_batch = {k: v.to(device) for k, v in next(iterator).items()}
-        y_hat, out_dict = model(holdout_batch, save_hidden_activations=True)
+        y_hat, out_dict = model(holdout_batch, save_hidden_activations=get_hiddens)
         model_activations.append(out_dict)
         if cfg.model.prediction_mode == 'regress':
             predicted_labels = torch.sign(y_hat.squeeze())
@@ -269,7 +269,10 @@ def eval_at_all_distances(cfg, dataloader, device, iterdataset, model, n):
             wandb.log({f'output_mean_{i}_{j}': output_mean.item(), 'iter': n})
         correct_matrix[i, j] = accuracy
         pred_matrix[i, j] = output_mean
-    return correct_matrix, holdout_batch, pred_matrix, ranks, model_activations
+    if get_hiddens:
+        return correct_matrix, holdout_batch, pred_matrix, ranks, model_activations
+    else:
+        return correct_matrix, holdout_batch, pred_matrix, ranks
 
 
 def calculate_induction_strength(cfg, holdout_batch, n, out_dict_eval):
