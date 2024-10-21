@@ -31,12 +31,16 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
         torch.cuda.manual_seed_all(seed)  # If using CUDA
 
     seed_config = {'seed': seed}
-    run = wandb.init(project=wandb_proj, config=seed_config)
+
+    run = wandb.init(project=wandb_proj, config={**seed_config.copy(), **config.copy()})
     cfg = config.copy()
 
     sweep_params = dict(run.config)  # Get sweep parameters from wandb
     cfg = update_nested_config(cfg, sweep_params)  # Merge sweep params into the default config
     cfg = dd(cfg)
+    for k, v in cfg.items():
+        if isinstance(v, dict):
+            cfg[k] = dd(v)
     print(f"Config parameters: {cfg}")
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
