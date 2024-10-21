@@ -251,7 +251,11 @@ class Transformer(nn.Module):
         if self.pos_emb_loc == 'add':
             h = h + self.positional_embedding[:, :h.shape[1], :]
         elif self.pos_emb_loc == 'append':
-            h = torch.cat([h, self.positional_embedding[:, :h.shape[1], :]], dim=-1)
+            batch_size, seq_len, _ = h.shape
+            # Expand the positional embeddings to match the batch size
+            positional_embeddings = self.positional_embedding[:, :seq_len, :].expand(batch_size, -1, -1)
+            # Concatenate the embeddings
+            h = torch.cat([h, positional_embeddings], dim=-1)
         elif self.pos_emb_loc == 'none':
             pass
         else:

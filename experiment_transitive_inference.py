@@ -220,7 +220,9 @@ def run_experiment(config=config):
         'iw_accuracy': [],
         'accuracies': [],
         'predictions': [],
-        'loss': []
+        'loss': [],
+        'correct_mats': [],
+        'pred_mats': []
     }
 
 
@@ -231,28 +233,36 @@ def run_experiment(config=config):
     optimizer = optim.Adam(model.parameters(), lr=config.train.learning_rate, weight_decay=config.train.w_decay)
     criterion = nn.MSELoss()
     losses = []
+
+    steps_above_criterion = 10
     for n in range(config.train.niters):
         model.train()
         optimizer.zero_grad()
-        if config.seq.train_type == 'IC':
-            context, query, target = seqgen.get_ic_train_seq('adjacent')
-        elif config.seq.train_type == 'IW':
-            context, query, target = seqgen.get_iw_train_seq()
-        elif config.seq.train_type == 'testIC':
-            context, query, target = seqgen.test_ic_train_seq_simplest()
-        elif config.seq.train_type == 'testICclass':
-            context, query, target = seqgen.test_ic_train_seq_classify()
-        else:
-            raise ValueError('Invalid training sequence type')
 
-        if isinstance(criterion, nn.MSELoss):
-            target = float(target)
+        inputs = []
+        targets = []
+        for i in range(config.train.batch_size):
+            if config.seq.train_type == 'IC':
+                context, query, target = seqgen.get_ic_train_seq('adjacent')
+            elif config.seq.train_type == 'IW':
+                context, query, target = seqgen.get_iw_train_seq()
+            elif config.seq.train_type == 'testIC':
+                context, query, target = seqgen.test_ic_train_seq_simplest()
+            elif config.seq.train_type == 'testICclass':
+                context, query, target = seqgen.test_ic_train_seq_classify()
+            else:
+                raise ValueError('Invalid training sequence type')
 
-        inputs = get_transitive_inference_sequence_embeddings(context, query)
-        inputs = inputs.unsqueeze(0).to(device)
-        target = torch.tensor([target])
+            if isinstance(criterion, nn.MSELoss):
+                target = float(target)
+
+            # todo: bigger batches
+            inputs.append(get_transitive_inference_sequence_embeddings(context, query))
+            targets.append(target)
+        inputs = torch.stack(inputs).to(device)
+        target = torch.tensor([targets])
         y_hat, out_dict = model(inputs, save_weights=config.save_weights)
-        loss = criterion(y_hat.squeeze(0), target)
+        loss = criterion(y_hat.squeeze(), target.squeeze())
         losses.append(loss.item())
         loss.backward()
         optimizer.step()
@@ -277,21 +287,29 @@ def run_experiment(config=config):
 
             ranks = np.arange(seqgen.N)
             for i, j in itertools.product(ranks, ranks):
-                query = (seqgen.fixed_classes[i], seqgen.fixed_classes[j])
-                if config.seq.random_context_for_IW:
-                    context = seqgen.get_random_context()
-                else:
-                    context = []
-                inputs = get_transitive_inference_sequence_embeddings(context, query)
+                inputs = []
+                for _ in range(config.train.batch_size):
+                    query = (seqgen.fixed_classes[i], seqgen.fixed_classes[j])
+                    if config.seq.random_context_for_IW:
+                        context = seqgen.get_random_context()
+                    else:
+                        context = []
+                    inputs.append(get_transitive_inference_sequence_embeddings(context, query))
+
+                inputs = torch.stack(inputs).to(device)
                 target = 0 if i == j else 1 if i < j else -1
-                inputs = inputs.unsqueeze(0).to(device)
                 y_hat, _ = model(inputs)
-                pred = torch.sign(y_hat).item()
-                correct = int(pred == target)
+                pred = torch.sign(y_hat)
+                accuracy = (pred==target).sum() / len(pred==target)
 
-                correct_matrix[i, j] = correct
-                pred_matrix[i, j] = y_hat.item()
+                correct_matrix[i, j] = accuracy
+                mean_output = y_hat.mean()
+                pred_matrix[i, j] = mean_output
 
+                # log to wandb each accuracy
+                if cfg.log.log_to_wandb:
+                    wandb.log({f'accuracy_{i}_{j}': accuracy, 'iter': n})
+                    wandb.log({f'output_mean_{i}_{j}': mean_output, 'iter': n})
 
             # Create a figure for the correct matrix
             fig_correct = plt.figure()
@@ -329,6 +347,8 @@ def run_experiment(config=config):
 
             metrics['accuracies'].append(mean_accuracies)
             metrics['predictions'].append(mean_preds)
+            metrics['pred_mats'].append(pred_matrix)
+            metrics['correct_mats'].append(correct_matrix)
 
             # Calculate and log the mean accuracy for each absolute distance
             for distance, accuracies in mean_accuracies.items():
@@ -342,13 +362,22 @@ def run_experiment(config=config):
                 if config.log.log_to_wandb:
                     wandb.log({f"mean_prediction_distance_{distance}": mean_pred, 'iter': n})
 
+        # if loss < 0.02:
+        #     steps_above_criterion += 1
+        # else:
+        #     steps_above_criterion = 0
+        # if steps_above_criterion > 10:
+        #     print(' reached low loss for more than 5 steps. stopping')
+        #     break
+
+    wandb.finish()
     return metrics, pred_matrix, correct_matrix, model, seqgen.fixed_classes
 
 
 if __name__ == '__main__':
     import os
 
-    n_runs = 6
+    n_runs = 10
     all_metrics = []
     for i in range(n_runs):
         torch.manual_seed(i)
@@ -380,6 +409,9 @@ if __name__ == '__main__':
         metrics_df.to_csv(os.path.join(save_dir, f'metrics_run_{i}.csv'), index=False)
 
         # Save pred and correct matrices
-        np.save(os.path.join(save_dir, f'pred_matrix_run_{i}.npy'), pred_matrix)
-        np.save(os.path.join(save_dir, f'correct_matrix_run_{i}.npy'), correct_matrix)
+        pred_matrices = np.stack(metrics['pred_mats'])
+        correct_matrices = np.stack(metrics['correct_mats'])
+
+        np.save(os.path.join(save_dir, f'pred_matrix_run_{i}.npy'), pred_matrices)
+        np.save(os.path.join(save_dir, f'correct_matrix_run_{i}.npy'), correct_matrices)
 
