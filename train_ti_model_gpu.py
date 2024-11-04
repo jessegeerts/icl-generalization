@@ -14,8 +14,7 @@ from datasets.data_generators import SymbolicDatasetForSampling, TransInfSeqGene
 from input_embedders import GaussianEmbedderForOrdering, OmniglotEmbedder
 from main_utils import log_att_weights
 from models import Transformer
-from sweep_utils import update_nested_config
-from utils import dotdict as dd, MyIterableDataset
+from utils import dotdict as dd, MyIterableDataset, update_nested_config
 from plotting_utils import plot_and_log_matrix
 
 

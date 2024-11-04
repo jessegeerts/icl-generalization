@@ -3,7 +3,7 @@ from utils import dotdict as dd
 
 config = dd(dict(
     model=dd(dict(
-        pos_dim=64,
+        pos_dim=0,
         emb_dim=512,
         n_heads=4,
         n_blocks=2,
@@ -17,9 +17,9 @@ config = dd(dict(
         drop_p=0.2,
         pos_emb_loc='none',  # in this experiment we add position embeddings already in the embedder class
         prediction_mode='regress',
-        pos_emb_type='onehot',  # in this experiment we add position embeddings already in the embedder class (sinusoidal or onehot)
+        pos_emb_type='rope',  # in this experiment we add position embeddings already in the embedder class (sinusoidal or onehot)
         pos_emb_randomization='no_shift',
-        add_pos_encodings=True
+        add_pos_encodings=False
     )),
     data=dd(dict(
         S=1603,
@@ -52,7 +52,7 @@ config = dd(dict(
         w_decay=7.091481879812184e-05,           # L2 regularisation parameter
         lr_scheduler='warmup_constant',
         warmup_steps=3000,
-        niters=120000,
+        niters=150000,
         steps_above_criterion=10,
     )),
     log=dd(dict(
@@ -63,5 +63,6 @@ config = dd(dict(
     )),
     save_weights=True,
     save_model=False,
-    eval_at_all_distances=True
+    eval_at_all_distances=True,
+    seed=1
 ))

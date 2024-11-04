@@ -9,3 +9,4 @@ reddy/*
 *.png
 *.npy
 *.csv
+results/*

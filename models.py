@@ -6,6 +6,7 @@ import torch.nn as nn
 from torch import nn as nn
 from torch.nn import functional as F, TransformerEncoderLayer, TransformerEncoder
 import math
+from pos_encodings import RotaryPositionalEmbedding, apply_rotary_pos_emb
 
 
 def get_sinusoidal_positional_embeddings_2(seq_len, d_model):
@@ -29,28 +30,6 @@ def get_sinusoidal_positional_embeddings(n_pos, dim, time=10000.0):
     position_enc = torch.cat([torch.sin(position_enc[:, 0::2]), torch.cos(position_enc[:, 1::2])], dim=-1)
 
     return position_enc.unsqueeze(0)
-
-
-# todo: implement RoPE in the transformer
-def apply_rotary_pos_emb(q, k, cos, sin):
-    # Apply rotary position embedding to queries and keys
-    def rotate_half(x):
-        x1, x2 = x.chunk(2, dim=-1)
-        return torch.cat((-x2, x1), dim=-1)
-
-    q = (q * cos) + (rotate_half(q) * sin)
-    k = (k * cos) + (rotate_half(k) * sin)
-    return q, k
-
-
-def rotary_pos_emb(x):
-    seq_len = x.shape[1]
-    d = x.shape[-1] // 2
-    theta = torch.arange(d, device=x.device) / d * math.pi
-    seq_idx = torch.arange(seq_len, device=x.device)
-    cos = torch.cos(seq_idx[:, None] * theta)
-    sin = torch.sin(seq_idx[:, None] * theta)
-    return cos, sin
 
 
 def get_parity_embeddings(seq_len, emb_dim):
@@ -98,6 +77,7 @@ class MaskedCausalAttention(nn.Module):
         # Custom initialization
         self.init_weights()
         self.training = True
+        self.rotary = RotaryPositionalEmbedding(h_dim//n_heads)
 
     def init_weights(self):
         # Initialize weights according to Reddy's code (note: weight initialization doesn't ssem to matter much )
@@ -116,6 +96,15 @@ class MaskedCausalAttention(nn.Module):
         q = self.q_net(x).view(B, T, N, D).transpose(1, 2)
         k = self.k_net(x).view(B, T, N, D).transpose(1, 2)
         v = self.v_net(x).view(B, T, N, D).transpose(1, 2)
+
+        # calculate rotary position embeddings
+        cos, sin = self.rotary(x, seq_dim=1)  # cos, sin shapes: (T, D/2)
+        # Expand cos and sin across batch and heads to match q and k shapes
+        cos = cos.transpose(0, 1).transpose(1, 2)  # shape now [batch, n_heads, seq_len, dim_head]
+        sin = sin.transpose(0, 1).transpose(1, 2)  # shape now [batch, n_heads, seq_len, dim_head]
+
+        # apply rotary position embeddings to queries and keys
+        q, k = apply_rotary_pos_emb(q, k, cos, sin)
 
         # weights (B, N, T, T)
         weights = q @ k.transpose(2, 3) / math.sqrt(D)

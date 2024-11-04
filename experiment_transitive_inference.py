@@ -11,8 +11,7 @@ import os
 from definitions import ROOT_FOLDER
 
 from main_utils import log_att_weights
-from sweep_utils import update_nested_config
-from utils import dotdict as dd
+from utils import dotdict as dd, update_nested_config
 from configs.trans_inf_config import config
 from models import Transformer
 from definitions import WANDB_KEY

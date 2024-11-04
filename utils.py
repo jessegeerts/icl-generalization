@@ -41,3 +41,20 @@ class MyIterableDataset(IterableDataset):
             raise NotImplementedError
         else:
             raise ValueError('Invalid mode: {}'.format(self.mode))
+
+
+def update_nested_config(config, update):
+    for key, value in update.items():
+        keys = key.split('.')
+        d = config
+        for k in keys[:-1]:
+            d = d.setdefault(k, {})
+        d[keys[-1]] = value
+    return config
+
+
+def update_config_with_args(config, args):
+    for key, value in vars(args).items():
+        if value is not None:  # Override only if argument was specified
+            config = update_nested_config(config, {f'train.{key}': value})
+    return config

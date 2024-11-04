@@ -176,13 +176,14 @@ class OmniglotEmbedder(nn.Module):
         labels = batch['label']
 
         seq_len = examples.shape[1] + labels.shape[1] - 1
-        inputs = torch.zeros((self.config.train.batch_size, seq_len, self.D + 2 * self.Nmax)).to(self.device)
-
+        input_dim = self.D + 2 * self.Nmax if self.config.model.add_pos_encodings else self.D
+        example_idx = 2 * self.Nmax if self.config.model.add_pos_encodings else 0
+        inputs = torch.zeros((self.config.train.batch_size, seq_len, input_dim)).to(self.device)
         # fill every first 2 indices with class examples
-        inputs[:, ::3, 2 * self.Nmax:] = self.embeddings[examples[:, ::2]]
-        inputs[:, 1::3, 2 * self.Nmax:] = self.embeddings[examples[:, 1::2]]
+        inputs[:, ::3, example_idx:] = self.embeddings[examples[:, ::2]]
+        inputs[:, 1::3, example_idx:] = self.embeddings[examples[:, 1::2]]
         # fill every 3rd index with label examples (except the last one)
-        inputs[:, 2::3, 2 * self.Nmax:] = self.label_embeddings[labels[:, :-1]]
+        inputs[:, 2::3, example_idx:] = self.label_embeddings[labels[:, :-1]]
 
         # add positional encoding (random shifts)
         if self.config.model.add_pos_encodings:
