@@ -52,12 +52,12 @@ config = dd(dict(
         w_decay=0.00004325692307609201,           # L2 regularisation parameter
         lr_scheduler='warmup_constant',
         warmup_steps=3241,
-        niters=120000,
+        niters=30000,
         steps_above_criterion=10,
     )),
     log=dd(dict(
         log_to_wandb=True,
-        logging_interval=3000,  # iterations
+        logging_interval=200,  # iterations
         checkpoint_interval=4000,  # iterations
         checkpoint_dir='checkpoints',
         wandb_project="in-context-trans-inf-hyperparam-search",
