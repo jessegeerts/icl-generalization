@@ -116,12 +116,12 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
 
         if n % cfg.log.logging_interval == 0:
             print(f'iteration {n}, loss {loss}')
-        #     if cfg.log.log_to_wandb:
-        #         # log current loss
-        #         wandb.log({'loss': loss.item(), 'iter': n})
-        #         # log current learning rate
-        #         for param_group in optimizer.param_groups:
-        #             wandb.log({'lr': param_group['lr'], 'iter': n})
+            if cfg.log.log_to_wandb:
+                # log current loss
+                wandb.log({'loss': loss.item(), 'iter': n})
+                # log current learning rate
+                for param_group in optimizer.param_groups:
+                    wandb.log({'lr': param_group['lr'], 'iter': n})
         #
         #     # evaluate on holdout set (still with adjacent pairs)
         #     iterdataset.set_mode('holdout')
