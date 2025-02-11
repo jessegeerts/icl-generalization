@@ -5,7 +5,6 @@ import random
 import numpy as np
 from configs.config_for_ic_transinf_withdistal import config
 import argparse
-from utils import update_nested_config
 
 
 def update_config_with_args(config, args):

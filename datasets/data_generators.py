@@ -862,6 +862,8 @@ class TransInfSeqGenerator:
         followed by a query pair of examples, where the label is 1 if the first
         example is less than the second, and -1 otherwise.
 
+        TODO: this needs to be adapted such that the query is a leave one out, and that there are positive and negative pairs in the context
+
         :param n_classes:
         :param shots:
         :return:
@@ -937,6 +939,7 @@ class TransInfSeqGenerator:
 
                 yield record
         return generator
+
 
     def get_AB_BB_seqs(self, shots):
         """Generate a sequence of examples for an even simpler task where it's AB vs BB (suggested by claudia).

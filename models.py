@@ -32,22 +32,6 @@ def get_sinusoidal_positional_embeddings(n_pos, dim, time=10000.0):
     return position_enc.unsqueeze(0)
 
 
-def get_parity_embeddings(seq_len, emb_dim):
-    # Create an empty tensor of size (seq_len, emb_dim)
-    pe = torch.zeros(seq_len, emb_dim)
-
-    # For even indices, set the embedding to a vector of ones
-    pe[::2] = torch.ones(emb_dim)
-
-    # For odd indices, set the embedding to a vector of zeros
-    pe[1::2] = torch.zeros(emb_dim)
-
-    # Add an extra dimension to match the input size
-    pe = pe.unsqueeze(0)
-
-    return pe
-
-
 class MaskedCausalAttention(nn.Module):
     def __init__(self, h_dim, max_T, n_heads, drop_p):
         super().__init__()

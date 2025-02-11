@@ -7,3 +7,6 @@ COLOR_PALETTE = 'Set1'
 model_save_dir = os.path.join(ROOT_FOLDER, 'models')
 if not os.path.exists(model_save_dir):
     os.makedirs(model_save_dir)
+
+
+coolors = ['464d77','36827f','f9db6d','f4eded','877666']

@@ -8,19 +8,19 @@ if __name__ == '__main__':
     wandb.login(key=WANDB_KEY)
 
     sweep_configuration = {
-        "name": "transinf-icl-sweep-macbook".format(datetime.now().strftime("%Y%m%d")),
-        "method": "random",
+        "name": "transinf-icl-sweep-distals".format(datetime.now().strftime("%Y%m%d")),
+        "method": "bayes",
         "metric": {"goal": "minimize", "name": "loss"},
         "parameters": {
-            "train.learning_rate": {"max": 1e-5, "min": 1e-7, "distribution": "uniform"},
+            "train.learning_rate": {"max": 7.e-04, "min": 1e-7, "distribution": "uniform"},
             "train.w_decay": {"max": 1e-4, "min": 1e-7, "distribution": "uniform"},
-            "model.n_blocks": {"max": 16, "min": 2, "distribution": "int_uniform"},
+            "model.use_mlp": {"values": [True, False], "distribution": "categorical"},
             "model.n_heads": {"values": [1, 2, 4, 8], "distribution": "categorical"},
             "train.warmup_steps": {"max": 10000, "min": 3000, "distribution": "int_uniform"},
-            "seq.ways": {"values": [2, 3, 4, 5, 6, 7, 8], "distribution": "categorical"},
+            "train.niters": {"max": 500000, "min": 100000, "distribution": "int_uniform"},
         },
-        "program": "train_ti_model_gpu.py",
-        "project": "ic_transinf_sweep",
+        "program": "train_ic_transinf_with_distals.py",
+        "project": "ic_transinf_with_distals",
         "entity": "jesse-geerts-14"
     }
 
