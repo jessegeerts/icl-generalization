@@ -10,7 +10,7 @@ import numpy as np
 
 import wandb
 from configs.config_for_ic_transinf_concat import config as default_config
-from datasets.concat_ti import generate_sequences_concat_ti
+from datasets.concat_ti import generate_sequences_concat_ti, generate_eval_sequences_concat_ti
 from input_embedders import GaussianEmbedderForOrdering, OmniglotEmbedder
 from main_utils import log_att_weights
 from models import Transformer
@@ -122,75 +122,44 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
                 # log current learning rate
                 for param_group in optimizer.param_groups:
                     wandb.log({'lr': param_group['lr'], 'iter': n})
-        #
-        #     # evaluate on holdout set (still with adjacent pairs)
-        #     iterdataset.set_mode('holdout')
-        #     iterator = iter(dataloader)
-        #     model.eval()
-        #     holdout_batch = {k: v.to(device) for k, v in next(iterator).items()}
-        #     if cfg.model.prediction_mode == 'classify':
-        #         label = holdout_batch['label'][:, -1].long()
-        #         label[label == -1] = 0
-        #     else:
-        #         label = holdout_batch['label'][:, -1].float().view(-1, 1)
-        #
-        #     holdout_loss, holdout_accuracy, out_dict_eval = \
-        #         eval_loss_and_accuracy(model, holdout_batch, label, criterion, cfg)
-        #     print(f'holdout loss: {holdout_loss}, holdout accuracy: {holdout_accuracy}')
-        #     if cfg.log.log_to_wandb:
-        #         wandb.log({'holdout_loss': holdout_loss.item(), 'holdout_accuracy': holdout_accuracy.item(), 'iter': n})
-        #     metrics['holdout_accuracy'].append(holdout_accuracy.item())
-        #     metrics['loss'].append(loss.item())
-        #     if cfg.save_weights:
-        #         log_att_weights(n, out_dict_eval, cfg)
-        #
-        #     if cfg.eval_at_all_distances:
-        #         correct_matrix, holdout_batch, pred_matrix, ranks = eval_at_all_distances(cfg, dataloader, device,
-        #                                                                                   iterdataset,
-        #                                                                                   model, n)
-        #
-        #         plot_and_log_matrix(cfg, correct_matrix, n, ranks, ranks, 'hot', 0, 1, 'Correct Matrix')
-        #         plot_and_log_matrix(cfg, pred_matrix, n, ranks, ranks, 'coolwarm', -1, 1, 'Pred Matrix')
-        #
-        #         # Initialize a dictionary to store the mean accuracies for each absolute distance
-        #         mean_accuracies = {}
-        #         mean_preds = {}
-        #         # Calculate the mean accuracy and output for each distance
-        #         for distance in range(-cfg.seq.ways + 1, cfg.seq.ways):
-        #             # Get the elements in the diagonal at the current absolute distance
-        #             diagonal_elements = torch.diagonal(correct_matrix, offset=distance)
-        #             diagonal_pred = torch.diagonal(pred_matrix, offset=distance)
-        #             # Calculate the mean accuracy
-        #             mean_accuracy = torch.mean(diagonal_elements)
-        #             mean_pred = torch.mean(diagonal_pred)
-        #             # Store the mean accuracy in the dictionary
-        #             mean_accuracies[distance] = mean_accuracy.item()
-        #             mean_preds[distance] = mean_pred.item()
-        #
-        #         metrics['accuracies'].append(mean_accuracies)
-        #         metrics['predictions'].append(mean_preds)
-        #
-        #         for distance, accuracy in mean_accuracies.items():
-        #             if cfg.log.log_to_wandb:
-        #                 wandb.log({f"mean_accuracy_distance_{distance}": accuracy, 'iter': n})
-        #                 wandb.log({f"mean_pred_distance_{distance}": mean_preds[distance], 'iter': n})
-        #
-        #     # calculate the induction strength of each L2 head
-        #     # this is the difference in attention weights from the query to the correct keys - the incorrect keys
-        #     calc_induction_strength = False
-        #     if calc_induction_strength:
-        #         calculate_induction_strength(cfg, holdout_batch, n, out_dict_eval)
-        #
-        #     if holdout_accuracy == 1.:
-        #         steps_above_criterion += 1
-        #     else:
-        #         steps_above_criterion = 0
-        #     if steps_above_criterion > cfg.train.steps_above_criterion:
-        #         print(f'holdout accuracy maximal for {steps_above_criterion} successive evaluations, stopping training')
-        #         break
-        #
-        #     iterdataset.set_mode('train')
-        #     iterator = iter(dataloader)
+
+            # evaluate the model on the holdout set
+            if cfg.eval_at_all_distances:
+                correct_matrix, holdout_batch, pred_matrix, ranks = eval_at_all_distances(cfg, device, model, n)
+
+                plot_and_log_matrix(cfg, correct_matrix, n, ranks, ranks, 'hot', 0, 1, 'Correct Matrix')
+                plot_and_log_matrix(cfg, pred_matrix, n, ranks, ranks, 'coolwarm', -1, 1, 'Pred Matrix')
+
+                # Initialize a dictionary to store the mean accuracies for each absolute distance
+                mean_accuracies = {}
+                mean_preds = {}
+                # Calculate the mean accuracy and output for each distance
+                for distance in range(-cfg.seq.ways + 1, cfg.seq.ways):
+                    # Get the elements in the diagonal at the current absolute distance
+                    diagonal_elements = torch.diagonal(correct_matrix, offset=distance)
+                    diagonal_pred = torch.diagonal(pred_matrix, offset=distance)
+                    # Calculate the mean accuracy
+                    mean_accuracy = torch.mean(diagonal_elements)
+                    mean_pred = torch.mean(diagonal_pred)
+                    # Store the mean accuracy in the dictionary
+                    mean_accuracies[distance] = mean_accuracy.item()
+                    mean_preds[distance] = mean_pred.item()
+
+                metrics['accuracies'].append(mean_accuracies)
+                metrics['predictions'].append(mean_preds)
+
+                for distance, accuracy in mean_accuracies.items():
+                    if cfg.log.log_to_wandb:
+                        wandb.log({f"mean_accuracy_distance_{distance}": accuracy, 'iter': n})
+                        wandb.log({f"mean_pred_distance_{distance}": mean_preds[distance], 'iter': n})
+
+            if loss < 0.0001:
+                steps_above_criterion += 1
+            else:
+                steps_above_criterion = 0
+            if steps_above_criterion > cfg.train.steps_above_criterion:
+                print(f'holdout accuracy maximal for {steps_above_criterion} successive evaluations, stopping training')
+                break
 
         if cfg.save_model and n % cfg.log.checkpoint_interval == 0:
             checkpoint_folder = os.path.join(cfg.log.checkpoint_dir, run.project, run.id)
@@ -204,7 +173,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
     return metrics
 
 
-def eval_at_all_distances(cfg, dataloader, device, iterdataset, model, n, get_hiddens=False):
+def eval_at_all_distances(cfg, device, model, n, get_hiddens=False):
     holdout_batch = None
     correct_matrix = torch.zeros((cfg.seq.ways, cfg.seq.ways))
     pred_matrix = torch.zeros((cfg.seq.ways, cfg.seq.ways))
@@ -213,15 +182,15 @@ def eval_at_all_distances(cfg, dataloader, device, iterdataset, model, n, get_hi
     for i, j in product(ranks, ranks):
         if i == j:
             continue  # only evaluate on off-diagonal elements
-        iterdataset.set_mode('holdout', set_query_ranks=(i, j))
-        iterator = iter(dataloader)
         model.eval()
-        holdout_batch = {k: v.to(device) for k, v in next(iterator).items()}
-        y_hat, out_dict = model(holdout_batch, save_hidden_activations=get_hiddens)
+
+        holdout_batch = generate_eval_sequences_concat_ti(cfg.train.batch_size, cfg.seq.ways, cfg.data.D // 2, query=(i, j))
+        holdout_batch = {k: v.to(device) for k, v in holdout_batch.items()}
+        y_hat, out_dict = model(holdout_batch['example'], save_hidden_activations=get_hiddens)
         model_activations.append(out_dict)
         if cfg.model.prediction_mode == 'regress':
             predicted_labels = torch.sign(y_hat.squeeze())
-            true_label_sign = torch.sign(holdout_batch['label'][:, -1].float())
+            true_label_sign = torch.sign(holdout_batch['label'].float())
             accuracy = (predicted_labels == true_label_sign).float().mean()
             output_mean = y_hat.detach().mean()
         elif cfg.model.prediction_mode == 'classify':
