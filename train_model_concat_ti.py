@@ -98,7 +98,8 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
     steps_above_criterion = 0
     for n in range(cfg.train.niters):
         model.train()
-        batch = generate_sequences_concat_ti(cfg.train.batch_size, cfg.seq.ways, cfg.data.D //2)
+        num_items = torch.randint(4, 9, (1,)).item()
+        batch = generate_sequences_concat_ti(cfg.train.batch_size, num_items, cfg.data.D //2)
         batch = {k: v.to(device) for k, v in batch.items()}
         optimizer.zero_grad()
 
