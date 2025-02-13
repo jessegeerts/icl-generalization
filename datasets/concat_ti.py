@@ -33,7 +33,7 @@ def generate_sequences_concat_ti(batch_size, num_items, item_dim):
            # Find positions in ordering to determine outcome
            i_pos = np.where(ordering == i)[0][0]
            j_pos = np.where(ordering == j)[0][0]
-           outcome = 1 if i_pos < j_pos else -1
+           outcome = j_pos - i_pos
 
            outcome_vec = torch.zeros(item_dim * 2)
            outcome_vec[0] = outcome
@@ -44,7 +44,7 @@ def generate_sequences_concat_ti(batch_size, num_items, item_dim):
     return out
 
 
-def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query=None):
+def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query_pos=None):
    """
    This needs to have the indices of the query item pair as input
 
@@ -56,8 +56,8 @@ def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query=Non
    seq_len = (num_items - 1) * 2 * 2 + 2  # these are all adjacent pairs + the query pair
    batch = torch.zeros(batch_size, seq_len, item_dim * 2)
 
-   if query is None:
-      query = np.random.permutation(num_items)[:2]
+   if query_pos is None:
+      query_pos = np.random.permutation(num_items)[:2]
 
    for b in range(batch_size):
        items = torch.randint(0, 2, (num_items, item_dim))
@@ -77,7 +77,7 @@ def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query=Non
            # Find positions in ordering to determine outcome
            i_pos = np.where(ordering == i)[0][0]
            j_pos = np.where(ordering == j)[0][0]
-           outcome = 1 if i_pos < j_pos else -1
+           outcome = j_pos - i_pos
 
            outcome_vec = torch.zeros(item_dim * 2)
            outcome_vec[0] = outcome
@@ -86,12 +86,10 @@ def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query=Non
            idx += 2
 
        # Add the query pair
-       pair = torch.cat([items[ordering[query[0]]], items[ordering[query[1]]]])
+       pair = torch.cat([items[ordering[query_pos[0]]], items[ordering[query_pos[1]]]])
        batch[b, idx] = pair
        # Find positions in ordering to determine outcome
-       i_pos = np.where(ordering == query[0].item())[0][0]
-       j_pos = np.where(ordering == query[1].item())[0][0]
-       outcome = 1 if i_pos < j_pos else -1
+       outcome = query_pos[1].item() - query_pos[0].item()
 
        outcome_vec = torch.zeros(item_dim * 2)
        outcome_vec[0] = outcome
