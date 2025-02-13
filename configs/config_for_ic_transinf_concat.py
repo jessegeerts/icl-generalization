@@ -36,7 +36,7 @@ config = dd(dict(
         Nmax=32,
     )),
     seq=dd(dict(
-        ways=5,                  # number of classes in a few-shot task
+        ways=7,                  # number of classes in a few-shot task
         shots=1,
         N=None,  # (ways*shots) sequence length will be 3N + 2 (note this must be at least ways*shots, actually currently exactly ways*shots)
         B=4,
