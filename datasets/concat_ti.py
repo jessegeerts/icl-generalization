@@ -51,9 +51,9 @@ def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query=Non
    :param batch_size:
    :param num_items:
    :param item_dim:
-   :return:ßßß
+   :return:
    """
-   seq_len = (num_items - 1) * 2 * 2  # these are all adjacent pairs + the query pair
+   seq_len = (num_items - 1) * 2 * 2 + 2  # these are all adjacent pairs + the query pair
    batch = torch.zeros(batch_size, seq_len, item_dim * 2)
 
    if query is None:
@@ -69,7 +69,7 @@ def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query=Non
        shuffle(adjacent_pairs)
 
        idx = 0
-       for i, j in adjacent_pairs[:-1]:
+       for i, j in adjacent_pairs:
            pair = torch.cat([items[i], items[j]])
            batch[b, idx] = pair
 
