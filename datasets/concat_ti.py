@@ -53,7 +53,10 @@ def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query_pos
    :param item_dim:
    :return:
    """
-   seq_len = (num_items - 1) * 2 * 2 + 2  # these are all adjacent pairs + the query pair
+   seq_len = (num_items - 1) * 2 * 2   # these are all adjacent pairs + the query pair
+   # if nonadjacent pair, sequence is longer by 2
+   if query_pos is not None and abs(query_pos[1] - query_pos[0]) > 1:
+      seq_len += 2
    batch = torch.zeros(batch_size, seq_len, item_dim * 2)
 
    if query_pos is None:
@@ -62,10 +65,15 @@ def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query_pos
    for b in range(batch_size):
        items = torch.randint(0, 2, (num_items, item_dim))
        ordering = np.random.permutation(num_items)
-       adjacent_pairs = list(pairwise(ordering))
 
+       adjacent_pairs = list(pairwise(ordering))
        # Add reversed pairs
        adjacent_pairs += [(p[1], p[0]) for p in adjacent_pairs]
+       # If this is an adjacent query, remove it from context
+       query_items = (ordering[query_pos[0]], ordering[query_pos[1]])
+       if abs(query_pos[1] - query_pos[0]) == 1:
+           adjacent_pairs.remove((query_items[0], query_items[1]))
+
        shuffle(adjacent_pairs)
 
        idx = 0
@@ -90,7 +98,6 @@ def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query_pos
        batch[b, idx] = pair
        # Find positions in ordering to determine outcome
        outcome = query_pos[1].item() - query_pos[0].item()
-
        outcome_vec = torch.zeros(item_dim * 2)
        outcome_vec[0] = outcome
        batch[b, idx + 1] = outcome_vec
