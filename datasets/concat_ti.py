@@ -70,6 +70,7 @@ def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query=Non
 
        idx = 0
        for i, j in adjacent_pairs:
+
            pair = torch.cat([items[i], items[j]])
            batch[b, idx] = pair
 
@@ -85,7 +86,7 @@ def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query=Non
            idx += 2
 
        # Add the query pair
-       pair = torch.cat([items[query[0]], items[query[1]]])
+       pair = torch.cat([items[ordering[query[0]]], items[ordering[query[1]]]])
        batch[b, idx] = pair
        # Find positions in ordering to determine outcome
        i_pos = np.where(ordering == query[0].item())[0][0]

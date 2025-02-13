@@ -175,6 +175,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
 
 
 def eval_at_all_distances(cfg, device, model, n, get_hiddens=False):
+    model.eval()
     holdout_batch = None
     correct_matrix = torch.zeros((cfg.seq.ways, cfg.seq.ways))
     pred_matrix = torch.zeros((cfg.seq.ways, cfg.seq.ways))
@@ -183,7 +184,6 @@ def eval_at_all_distances(cfg, device, model, n, get_hiddens=False):
     for i, j in product(ranks, ranks):
         if i == j:
             continue  # only evaluate on off-diagonal elements
-        model.eval()
 
         holdout_batch = generate_eval_sequences_concat_ti(cfg.train.batch_size, cfg.seq.ways, cfg.data.D // 2, query=(i, j))
         holdout_batch = {k: v.to(device) for k, v in holdout_batch.items()}
@@ -213,17 +213,6 @@ def eval_at_all_distances(cfg, device, model, n, get_hiddens=False):
         return correct_matrix, holdout_batch, pred_matrix, ranks, model_activations
     else:
         return correct_matrix, holdout_batch, pred_matrix, ranks
-
-
-def calculate_induction_strength(cfg, holdout_batch, n, out_dict_eval):
-    correct_ids = holdout_batch['label'][:, :-1] == holdout_batch['label'][:, -1].view(1, 128).T
-    for h in range(cfg.model.n_heads):
-        attn_weights = out_dict_eval[f'block_1']['weights'][:, h, :, :]
-        # only get every second column, starting from the second
-        query_to_label = attn_weights[:, -1, 1::2]
-        induction_strength = query_to_label[correct_ids].mean() - query_to_label[~correct_ids].mean()
-        if cfg.log.log_to_wandb:
-            wandb.log({f'induction_strength_head_{h}': induction_strength.item(), 'iter': n})
 
 
 def eval_loss_and_accuracy(mod, inputs, labels, criterion, config):
