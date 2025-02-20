@@ -46,11 +46,13 @@ def generate_sequences_concat_ti(batch_size, num_items, item_dim, leave_one_out=
 
        if not leave_one_out:
            # Add the query pair, which during training is one of the context pairs repeated
-           query_pos = np.random.permutation(num_items)[:2]
-           pair = torch.cat([items[ordering[query_pos[0]]], items[ordering[query_pos[1]]]])
+           query_pair_ids = pairs[np.random.randint(0, len(pairs))]
+           pair = torch.cat([items[query_pair_ids[0]], items[query_pair_ids[1]]])
            batch[b, idx] = pair
            # Find positions in ordering to determine outcome
-           outcome = query_pos[1] - query_pos[0]
+           i_pos = np.where(ordering == query_pair_ids[0])[0][0]
+           j_pos = np.where(ordering == query_pair_ids[1])[0][0]
+           outcome = j_pos - i_pos
            outcome_vec = torch.zeros(item_dim * 2)
            outcome_vec[0] = outcome
 
