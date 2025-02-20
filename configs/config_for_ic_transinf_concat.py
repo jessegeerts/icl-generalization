@@ -22,7 +22,6 @@ config = dd(dict(
         add_pos_encodings=True
     )),
     data=dd(dict(
-        type='gaussian',  # 'gaussian' or 'omniglot' or 'onehot' (to be implemented)
         S=1603,
         n_rare_classes=1600-100-32,
         n_common_classes=32,
@@ -43,6 +42,7 @@ config = dd(dict(
         pB=1.,
         pC=1.,
         train_seq_type='order',
+        leave_one_out=False,
         include_flipped=False,
         include_distal_in_training=False  # we train only on adjacent pairs
     )),

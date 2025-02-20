@@ -12,7 +12,7 @@ def pairwise(iterable):
     return zip(a, b)
 
 
-def generate_sequences_concat_ti(batch_size, num_items, item_dim):
+def generate_sequences_concat_ti(batch_size, num_items, item_dim, leave_one_out=True):
     seq_len = (num_items - 1) * 2 * 2
     batch = torch.zeros(batch_size, seq_len, item_dim * 2)
 
@@ -40,11 +40,22 @@ def generate_sequences_concat_ti(batch_size, num_items, item_dim):
            batch[b, idx + 1] = outcome_vec
 
            idx += 2
+
+       if not leave_one_out:
+           # Add the query pair, which during training is one of the context pairs repeated
+           query_pos = np.random.permutation(num_items)[:2]
+           pair = torch.cat([items[ordering[query_pos[0]]], items[ordering[query_pos[1]]]])
+           batch[b, idx] = pair
+           # Find positions in ordering to determine outcome
+           outcome = query_pos[1] - query_pos[0]
+           outcome_vec = torch.zeros(item_dim * 2)
+           outcome_vec[0] = outcome
+
     out = {'example': batch[:, :seq_len-1, :], 'label': batch[:, -1, 0]}
     return out
 
 
-def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query_pos=None):
+def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query_pos=None, leave_one_out=True):
    """
    This needs to have the indices of the query item pair as input
 
@@ -70,9 +81,10 @@ def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query_pos
        # Add reversed pairs
        adjacent_pairs += [(p[1], p[0]) for p in adjacent_pairs]
        # If this is an adjacent query, remove it from context
-       query_items = (ordering[query_pos[0]], ordering[query_pos[1]])
-       if abs(query_pos[1] - query_pos[0]) == 1:
-           adjacent_pairs.remove((query_items[0], query_items[1]))
+       if leave_one_out:
+           query_items = (ordering[query_pos[0]], ordering[query_pos[1]])
+           if abs(query_pos[1] - query_pos[0]) == 1:
+               adjacent_pairs.remove((query_items[0], query_items[1]))
 
        shuffle(adjacent_pairs)
 

@@ -99,7 +99,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
     for n in range(cfg.train.niters):
         model.train()
         num_items = torch.randint(4, 9, (1,)).item()
-        batch = generate_sequences_concat_ti(cfg.train.batch_size, num_items, cfg.data.D //2)
+        batch = generate_sequences_concat_ti(cfg.train.batch_size, num_items, cfg.data.D //2, leave_one_out=cfg.seq.leave_one_out)
         batch = {k: v.to(device) for k, v in batch.items()}
         optimizer.zero_grad()
 
@@ -184,7 +184,8 @@ def eval_at_all_distances(cfg, device, model, n, get_hiddens=False):
     for i, j in product(ranks, ranks):
         if i == j:
             continue  # only evaluate on off-diagonal elements
-        holdout_batch = generate_eval_sequences_concat_ti(cfg.train.batch_size, cfg.seq.ways, cfg.data.D // 2, query_pos=(i, j))
+        holdout_batch = generate_eval_sequences_concat_ti(cfg.train.batch_size, cfg.seq.ways,
+                                                          cfg.data.D // 2, query_pos=(i, j), leave_one_out=cfg.seq.leave_one_out)
         holdout_batch = {k: v.to(device) for k, v in holdout_batch.items()}
         y_hat, out_dict = model(holdout_batch['example'], save_hidden_activations=get_hiddens)
         model_activations.append(out_dict)
