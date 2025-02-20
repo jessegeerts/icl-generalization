@@ -185,7 +185,7 @@ def eval_at_all_distances(cfg, device, model, n, get_hiddens=False):
         if i == j:
             continue  # only evaluate on off-diagonal elements
         holdout_batch = generate_eval_sequences_concat_ti(cfg.train.batch_size, cfg.seq.ways,
-                                                          cfg.data.D // 2, query_pos=(i, j), leave_one_out=cfg.seq.leave_one_out)
+                                                          cfg.data.D // 2, query_pos=(i, j))
         holdout_batch = {k: v.to(device) for k, v in holdout_batch.items()}
         y_hat, out_dict = model(holdout_batch['example'], save_hidden_activations=get_hiddens)
         model_activations.append(out_dict)

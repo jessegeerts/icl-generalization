@@ -86,10 +86,9 @@ def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query_pos
        # Add reversed pairs
        adjacent_pairs += [(p[1], p[0]) for p in adjacent_pairs]
        # If this is an adjacent query, remove it from context
-       if leave_one_out:
-           query_items = (ordering[query_pos[0]], ordering[query_pos[1]])
-           if abs(query_pos[1] - query_pos[0]) == 1:
-               adjacent_pairs.remove((query_items[0], query_items[1]))
+       query_items = (ordering[query_pos[0]], ordering[query_pos[1]])
+       if abs(query_pos[1] - query_pos[0]) == 1:
+           adjacent_pairs.remove((query_items[0], query_items[1]))
 
        shuffle(adjacent_pairs)
 
