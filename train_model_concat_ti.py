@@ -204,9 +204,9 @@ def eval_at_all_distances(cfg, device, model, n, get_hiddens=False):
                              + 'Valid options are: classify, regress')
 
         # log the accuracy and output mean
-        if cfg.log.log_to_wandb:
-            wandb.log({f'accuracy_{i}_{j}': accuracy.item(), 'iter': n})
-            wandb.log({f'output_mean_{i}_{j}': output_mean.item(), 'iter': n})
+        # if cfg.log.log_to_wandb:
+        #     wandb.log({f'accuracy_{i}_{j}': accuracy.item(), 'iter': n})
+        #     wandb.log({f'output_mean_{i}_{j}': output_mean.item(), 'iter': n})
         correct_matrix[i, j] = accuracy
         pred_matrix[i, j] = output_mean
     if get_hiddens:
