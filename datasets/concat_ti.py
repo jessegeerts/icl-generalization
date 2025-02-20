@@ -60,7 +60,7 @@ def generate_sequences_concat_ti(batch_size, num_items, item_dim, leave_one_out=
     return out
 
 
-def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query_pos=None, leave_one_out=True):
+def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query_pos=None):
    """
    This needs to have the indices of the query item pair as input
 
@@ -69,10 +69,7 @@ def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query_pos
    :param item_dim:
    :return:
    """
-   if leave_one_out:
-      seq_len = (num_items - 1) * 2 * 2   # these are all adjacent pairs + the query pair
-   else:
-      seq_len = (num_items - 1) * 2 * 2 + 2
+   seq_len = (num_items - 1) * 2 * 2   # these are all adjacent pairs + the query pair
    # if nonadjacent pair, sequence is longer by 2
    if query_pos is not None and abs(query_pos[1] - query_pos[0]) > 1:
       seq_len += 2
