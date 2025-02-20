@@ -13,7 +13,10 @@ def pairwise(iterable):
 
 
 def generate_sequences_concat_ti(batch_size, num_items, item_dim, leave_one_out=True):
-    seq_len = (num_items - 1) * 2 * 2
+    if leave_one_out:
+        seq_len = (num_items - 1) * 2 * 2
+    else:
+        seq_len = (num_items - 1) * 2 * 2 + 2
     batch = torch.zeros(batch_size, seq_len, item_dim * 2)
 
     for b in range(batch_size):
@@ -64,7 +67,10 @@ def generate_eval_sequences_concat_ti(batch_size, num_items, item_dim, query_pos
    :param item_dim:
    :return:
    """
-   seq_len = (num_items - 1) * 2 * 2   # these are all adjacent pairs + the query pair
+   if leave_one_out:
+      seq_len = (num_items - 1) * 2 * 2   # these are all adjacent pairs + the query pair
+   else:
+      seq_len = (num_items - 1) * 2 * 2 + 2
    # if nonadjacent pair, sequence is longer by 2
    if query_pos is not None and abs(query_pos[1] - query_pos[0]) > 1:
       seq_len += 2
