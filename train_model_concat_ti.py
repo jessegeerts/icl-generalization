@@ -132,29 +132,6 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
                 plot_and_log_matrix(cfg, correct_matrix, n, ranks, ranks, 'hot', 0, 1, 'Correct Matrix')
                 plot_and_log_matrix(cfg, pred_matrix, n, ranks, ranks, 'coolwarm', -1, 1, 'Pred Matrix')
 
-                # Initialize a dictionary to store the mean accuracies for each absolute distance
-                mean_accuracies = {}
-                mean_preds = {}
-                # Calculate the mean accuracy and output for each distance
-                for distance in range(-cfg.seq.ways + 1, cfg.seq.ways):
-                    # Get the elements in the diagonal at the current absolute distance
-                    diagonal_elements = torch.diagonal(correct_matrix, offset=distance)
-                    diagonal_pred = torch.diagonal(pred_matrix, offset=distance)
-                    # Calculate the mean accuracy
-                    mean_accuracy = torch.mean(diagonal_elements)
-                    mean_pred = torch.mean(diagonal_pred)
-                    # Store the mean accuracy in the dictionary
-                    mean_accuracies[distance] = mean_accuracy.item()
-                    mean_preds[distance] = mean_pred.item()
-
-                metrics['accuracies'].append(mean_accuracies)
-                metrics['predictions'].append(mean_preds)
-
-                for distance, accuracy in mean_accuracies.items():
-                    if cfg.log.log_to_wandb:
-                        wandb.log({f"mean_accuracy_distance_{distance}": accuracy, 'iter': n})
-                        wandb.log({f"mean_pred_distance_{distance}": mean_preds[distance], 'iter': n})
-
             if loss < 0.0001:
                 steps_above_criterion += 1
             else:
