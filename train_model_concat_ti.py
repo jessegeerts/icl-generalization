@@ -2,6 +2,7 @@ import math
 from functools import partial
 from itertools import product
 import os
+import yaml
 
 import torch
 from torch import optim as optim, nn as nn
@@ -169,6 +170,10 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
             model_path = os.path.join(checkpoint_folder, f"model_{n}.pt")
             print(f"Saving model to {model_path}")
             torch.save(model.state_dict(), model_path)
+            # also save config as yaml
+            config_path = os.path.join(checkpoint_folder, 'config.yaml')
+            with open(config_path, 'w') as f:
+                yaml.dump(run.config, f)
 
     run.finish()
     return metrics
