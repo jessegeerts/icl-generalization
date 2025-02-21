@@ -10,3 +10,4 @@ reddy/*
 *.npy
 *.csv
 results/*
+checkpoints/*
