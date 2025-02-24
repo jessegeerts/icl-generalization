@@ -124,7 +124,10 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
                 # log current learning rate
                 for param_group in optimizer.param_groups:
                     wandb.log({'lr': param_group['lr'], 'iter': n})
-
+                # log mean output value for training batch (to check for model bias)
+                output_mean = y_hat.detach().mean()
+                wandb.log({'output_mean_train': output_mean.item(), 'iter': n})
+                
             # evaluate the model on the holdout set
             if cfg.eval_at_all_distances:
                 correct_matrix, holdout_batch, pred_matrix, ranks = eval_at_all_distances(cfg, device, model, n,
