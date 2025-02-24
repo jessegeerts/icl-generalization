@@ -43,7 +43,6 @@ config = dd(dict(
         pC=1.,
         train_seq_type='order',
         leave_one_out=False,  # false means copy of the query is in context during training
-        include_flipped=False,
         include_distal_in_training=False  # we train only on adjacent pairs
     )),
     train=dd(dict(
@@ -52,7 +51,7 @@ config = dd(dict(
         w_decay=0.00004325692307609201,           # L2 regularisation parameter
         lr_scheduler='warmup_constant',
         warmup_steps=3241,
-        niters=30000,
+        niters=90000,
         steps_above_criterion=10,
     )),
     log=dd(dict(

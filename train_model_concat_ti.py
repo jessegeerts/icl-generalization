@@ -127,7 +127,8 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
 
             # evaluate the model on the holdout set
             if cfg.eval_at_all_distances:
-                correct_matrix, holdout_batch, pred_matrix, ranks = eval_at_all_distances(cfg, device, model, n)
+                correct_matrix, holdout_batch, pred_matrix, ranks = eval_at_all_distances(cfg, device, model, n,
+                                                                                          leave_one_out=cfg.seq.leave_one_out)
 
                 plot_and_log_matrix(cfg, correct_matrix, n, ranks, ranks, 'hot', 0, 1, 'Correct Matrix')
                 plot_and_log_matrix(cfg, pred_matrix, n, ranks, ranks, 'coolwarm', -1, 1, 'Pred Matrix')
@@ -156,7 +157,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
     return metrics
 
 
-def eval_at_all_distances(cfg, device, model, n, get_hiddens=False):
+def eval_at_all_distances(cfg, device, model, n, get_hiddens=False, leave_one_out=True):
     model.eval()
     holdout_batch = None
     correct_matrix = torch.zeros((cfg.seq.ways, cfg.seq.ways))
@@ -167,7 +168,8 @@ def eval_at_all_distances(cfg, device, model, n, get_hiddens=False):
         if i == j:
             continue  # only evaluate on off-diagonal elements
         holdout_batch = generate_eval_sequences_concat_ti(cfg.train.batch_size, cfg.seq.ways,
-                                                          cfg.data.D // 2, query_pos=(i, j))
+                                                          cfg.data.D // 2, query_pos=(i, j),
+                                                          leave_one_out=leave_one_out)
         holdout_batch = {k: v.to(device) for k, v in holdout_batch.items()}
         y_hat, out_dict = model(holdout_batch['example'], save_hidden_activations=get_hiddens)
         model_activations.append(out_dict)
@@ -186,9 +188,8 @@ def eval_at_all_distances(cfg, device, model, n, get_hiddens=False):
                              + 'Valid options are: classify, regress')
 
         # log the accuracy and output mean
-        # if cfg.log.log_to_wandb:
-        #     wandb.log({f'accuracy_{i}_{j}': accuracy.item(), 'iter': n})
-        #     wandb.log({f'output_mean_{i}_{j}': output_mean.item(), 'iter': n})
+        if cfg.log.log_to_wandb:
+            wandb.log({f'output_mean_{i}_{j}': output_mean.item(), 'iter': n})
         correct_matrix[i, j] = accuracy
         pred_matrix[i, j] = output_mean
     if get_hiddens:
