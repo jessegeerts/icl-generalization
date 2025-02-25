@@ -65,7 +65,7 @@ config = dd(dict(
         run_name=None
     )),
     save_weights=False,
-    save_model=True,
+    save_model=False,
     eval_at_all_distances=True,
     seed=1
 ))
