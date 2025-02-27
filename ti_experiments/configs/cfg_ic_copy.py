@@ -40,7 +40,7 @@ config = dd(dict(
         w_decay=0.00004325692307609201,           # L2 regularisation parameter
         lr_scheduler='warmup_constant',
         warmup_steps=3241,
-        niters=120000,
+        niters=1000000,
         steps_above_criterion=10,
     )),
     log=dd(dict(
