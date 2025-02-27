@@ -6,18 +6,17 @@ import yaml
 
 import torch
 from torch import optim as optim, nn as nn
-from torch.utils.data import DataLoader
 import numpy as np
 
 import wandb
-from configs.config_for_ic_transinf_concat import config as default_config
-from datasets.concat_ti import generate_sequences_concat_ti, generate_eval_sequences_concat_ti
-from input_embedders import GaussianEmbedderForOrdering, OmniglotEmbedder
+from ti_experiments.configs.cfg_ic_leave_one_out import config as default_config
+from datasets.concat_ti import generate_sequences_concat_ti, generate_eval_sequences_concat_ti, \
+    generate_iw_sequences_concat_ti, generate_iw_eval_sequences_concat_ti
 from main_utils import log_att_weights
 from models import Transformer
-from utils import dotdict as dd, MyIterableDataset, update_nested_config
+from utils import dotdict as dd, update_nested_config
 from plotting_utils import plot_and_log_matrix
-
+from definitions import ROOT_FOLDER
 
 torch.set_num_threads(4)
 
@@ -43,6 +42,10 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
             cfg[k] = dd(v)
     print(f"Config parameters: {cfg}")
 
+    checkpoint_folder = os.path.join(ROOT_FOLDER, cfg.log.checkpoint_dir, run.project, run.id)
+    if not os.path.exists(checkpoint_folder):
+        os.makedirs(checkpoint_folder)
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
@@ -60,10 +63,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
     else:
         cfg.model.out_dim = 1  # for regression
 
-    ### load or construct the dataset
-
     model = Transformer(config=cfg.model).to(device)  # my custom transformer encoder
-
     optimizer = optim.Adam(model.parameters(), lr=cfg.train.learning_rate, weight_decay=cfg.train.w_decay)
     if cfg.train.lr_scheduler == 'cosine':
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.train.niters, eta_min=.00001)
@@ -96,11 +96,26 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
         raise ValueError('Invalid prediction mode: {}'.format(cfg.model.prediction_mode)
                          + 'Valid options are: classify, regress')
 
+    if cfg.seq.train_seq_type == 'ic':
+        train_generator = partial(generate_sequences_concat_ti, batch_size=cfg.train.batch_size,
+                                  item_dim=cfg.data.D // 2,
+                                  leave_one_out=cfg.seq.leave_one_out)
+        fixed_items = None  # not used for IC sequences
+    elif cfg.seq.train_seq_type == 'iw':
+        fixed_items = torch.randint(0, 2, (cfg.seq.ways, cfg.data.D // 2))
+        # save fixed items to checkpoint folder for later evals
+        fixed_items_path = os.path.join(checkpoint_folder, 'fixed_items.pt')
+        torch.save(fixed_items, fixed_items_path)
+        train_generator = partial(generate_iw_sequences_concat_ti, batch_size=cfg.train.batch_size,
+                                  item_dim=cfg.data.D // 2, items=fixed_items, distractors=cfg.seq.add_distractors_for_iw_seqs)
+    else:
+        raise ValueError('Invalid training sequence type: {}'.format(cfg.seq.train_seq_type))
+
     steps_above_criterion = 0
     for n in range(cfg.train.niters):
         model.train()
-        num_items = torch.randint(4, 9, (1,)).item()
-        batch = generate_sequences_concat_ti(cfg.train.batch_size, num_items, cfg.data.D //2, leave_one_out=cfg.seq.leave_one_out)
+        num_items = torch.randint(4, 9, (1,)).item()  # vary number of items (for IC sequences)
+        batch = train_generator(num_items=num_items)
         batch = {k: v.to(device) for k, v in batch.items()}
         optimizer.zero_grad()
 
@@ -127,11 +142,34 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
                 # log mean output value for training batch (to check for model bias)
                 output_mean = y_hat.detach().mean()
                 wandb.log({'output_mean_train': output_mean.item(), 'iter': n})
-                
-            # evaluate the model on the holdout set
+
+            # evaluate model on holdout set (same distribution as training set)
+            model.eval()
+            holdout_batch = train_generator(num_items=num_items)
+            holdout_batch = {k: v.to(device) for k, v in holdout_batch.items()}
+
+            y_hat, out_dict = model(holdout_batch['example'],
+                             save_hidden_activations=cfg.save_hiddens,
+                             save_weights=cfg.save_weights)
+            if cfg.model.prediction_mode == 'classify':
+                label = holdout_batch['label'][:, -1].long()
+                label[label == -1] = 0
+            else:
+                label = holdout_batch['label'].view(-1, 1)
+
+            if cfg.save_weights:
+                log_att_weights(n, out_dict, cfg)
+
+            holdout_accuracy = torch.sum(torch.sign(y_hat)==label).item() / len(y_hat)
+            print(f'Holdout accuracy: {holdout_accuracy}')
+            if cfg.log.log_to_wandb:
+                wandb.log({'holdout_accuracy': holdout_accuracy, 'iter': n})
+
+            # evaluate the model on all distances
             if cfg.eval_at_all_distances:
                 correct_matrix, holdout_batch, pred_matrix, ranks = eval_at_all_distances(cfg, device, model, n,
-                                                                                          leave_one_out=cfg.seq.leave_one_out)
+                                                                                          leave_one_out=cfg.seq.leave_one_out,
+                                                                                          items=fixed_items)
 
                 plot_and_log_matrix(cfg, correct_matrix, n, ranks, ranks, 'hot', 0, 1, 'Correct Matrix')
                 plot_and_log_matrix(cfg, pred_matrix, n, ranks, ranks, 'coolwarm', -1, 1, 'Pred Matrix')
@@ -145,9 +183,6 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
                 break
 
         if cfg.save_model and n % cfg.log.checkpoint_interval == 0:
-            checkpoint_folder = os.path.join(cfg.log.checkpoint_dir, run.project, run.id)
-            if not os.path.exists(checkpoint_folder):
-                os.makedirs(checkpoint_folder)
             model_path = os.path.join(checkpoint_folder, f"model_{n}.pt")
             print(f"Saving model to {model_path}")
             torch.save(model.state_dict(), model_path)
@@ -160,7 +195,17 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
     return metrics
 
 
-def eval_at_all_distances(cfg, device, model, n, get_hiddens=False, leave_one_out=True):
+def eval_at_all_distances(cfg, device, model, n, get_hiddens=False, leave_one_out=True, items=None):
+    """
+
+    :param cfg:
+    :param device:
+    :param model:
+    :param n: iteration number (for logging)
+    :param get_hiddens:
+    :param leave_one_out:
+    :return:
+    """
     model.eval()
     holdout_batch = None
     correct_matrix = torch.zeros((cfg.seq.ways, cfg.seq.ways))
@@ -170,9 +215,16 @@ def eval_at_all_distances(cfg, device, model, n, get_hiddens=False, leave_one_ou
     for i, j in product(ranks, ranks):
         if i == j:
             continue  # only evaluate on off-diagonal elements
-        holdout_batch = generate_eval_sequences_concat_ti(cfg.train.batch_size, cfg.seq.ways,
-                                                          cfg.data.D // 2, query_pos=(i, j),
-                                                          leave_one_out=leave_one_out)
+        if cfg.seq.train_seq_type == 'ic':
+            holdout_batch = generate_eval_sequences_concat_ti(cfg.train.batch_size, cfg.seq.ways,
+                                                              cfg.data.D // 2, query_pos=(i, j),
+                                                              leave_one_out=leave_one_out)
+        elif cfg.seq.train_seq_type == 'iw':
+            holdout_batch = generate_iw_eval_sequences_concat_ti(cfg.train.batch_size, cfg.seq.ways,
+                                                                cfg.data.D // 2, items=items, query_pos=(i, j),
+                                                                distractors=cfg.seq.add_distractors_for_iw_seqs)
+        else:
+            raise ValueError('Invalid training sequence type: {}'.format(cfg.seq.train_seq_type))
         holdout_batch = {k: v.to(device) for k, v in holdout_batch.items()}
         y_hat, out_dict = model(holdout_batch['example'], save_hidden_activations=get_hiddens)
         model_activations.append(out_dict)

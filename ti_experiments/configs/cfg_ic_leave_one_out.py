@@ -22,28 +22,17 @@ config = dd(dict(
         add_pos_encodings=True
     )),
     data=dd(dict(
-        S=1603,
-        n_rare_classes=1600-100-32,
-        n_common_classes=32,
-        n_holdout_classes=100,
-        K=1602,                 # number of classes (needs to be divisible by L)
-        L=2,                   # number of labels
-        D=64,                   # dimension of inputs
-        subD=32,                # dimension of subvectors (for partial exposure paradigm)
-        alpha=0.,               # zipf exponent
-        eps=0.01,                # within-class variance (higher => more ICL)
-        Nmax=32,
+        D=64,  # input dimensionality
     )),
     seq=dd(dict(
         ways=7,                  # number of classes in a few-shot task
         shots=1,
         N=None,  # (ways*shots) sequence length will be 3N + 2 (note this must be at least ways*shots, actually currently exactly ways*shots)
         B=4,
-        pB=1.,
-        pC=1.,
-        train_seq_type='order',
+        train_seq_type='ic',
         leave_one_out=True,  # false means copy of the query is in context during training
-        include_distal_in_training=False  # we train only on adjacent pairs
+        include_distal_in_training=False,  # we train only on adjacent pairs
+        add_distractors_for_iw_seqs=False
     )),
     train=dd(dict(
         batch_size=128,
@@ -62,7 +51,8 @@ config = dd(dict(
         wandb_project="in-context-trans-inf-hyperparam-search",
         run_name=None
     )),
-    save_weights=False,
+    save_weights=True,
+    save_hiddens=False,
     save_model=False,
     eval_at_all_distances=True
 ))

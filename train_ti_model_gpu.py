@@ -210,7 +210,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
 
             # calculate the induction strength of each L2 head
             # this is the difference in attention weights from the query to the correct keys - the incorrect keys
-            calc_induction_strength = False
+            calc_induction_strength = True
             if calc_induction_strength:
                 calculate_induction_strength(cfg, holdout_batch, n, out_dict_eval)
 
