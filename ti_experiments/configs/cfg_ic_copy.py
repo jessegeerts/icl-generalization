@@ -30,7 +30,7 @@ config = dd(dict(
         N=None,  # (ways*shots) sequence length will be 3N + 2 (note this must be at least ways*shots, actually currently exactly ways*shots)
         B=4,
         train_seq_type='ic',
-        leave_one_out=True,  # false means copy of the query is in context during training
+        leave_one_out=False,  # false means copy of the query is in context during training
         include_distal_in_training=False,  # we train only on adjacent pairs
         add_distractors_for_iw_seqs=False
     )),
