@@ -313,7 +313,7 @@ class OmniglotEmbedder(nn.Module):
                                           'concatenate_embeddings') and self.config.model.concatenate_embeddings else self.D
 
         # Fill even positions with concatenated embeddings
-        for i in range(num_groups - 1):
+        for i in range(num_groups):
             # Get the pair of embeddings
             emb1 = self.embeddings[examples[:, i * 2]]
             emb2 = self.embeddings[examples[:, i * 2 + 1]]
@@ -324,9 +324,10 @@ class OmniglotEmbedder(nn.Module):
             # Place at the correct position in the sequence
             inputs[:, i * 2, example_idx:example_idx + self.D] = concat_emb
 
-            # For labels, we need to pad with zeros since the label embedding dimension is half of concat dimension
-            label_emb = self.label_embeddings[labels[:, i]]
-            inputs[:, i * 2 + 1, example_idx:example_idx + self.D] = label_emb
+            if i < num_groups - 1:
+                # For labels, we need to pad with zeros since the label embedding dimension is half of concat dimension
+                label_emb = self.label_embeddings[labels[:, i]]
+                inputs[:, i * 2 + 1, example_idx:example_idx + self.D] = label_emb
 
         # Add positional encoding if needed
         if self.config.model.add_pos_encodings:
