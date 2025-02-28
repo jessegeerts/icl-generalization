@@ -4,7 +4,7 @@ from utils import dotdict as dd
 config = dd(dict(
     model=dd(dict(
         pos_dim=64,
-        emb_dim=512,
+        emb_dim=512*2,
         n_heads=4,
         n_blocks=3,
         include_mlp=False,
@@ -19,7 +19,8 @@ config = dd(dict(
         prediction_mode='regress',
         pos_emb_type='onehot',  # in this experiment we add position embeddings already in the embedder class (sinusoidal or onehot)
         pos_emb_randomization='no_shift',
-        add_pos_encodings=True
+        add_pos_encodings=True,
+        concatenate_embeddings=True
     )),
     data=dd(dict(
         type='omniglot',  # 'gaussian' or 'omniglot' or 'onehot' (to be implemented)
@@ -29,7 +30,7 @@ config = dd(dict(
         n_holdout_classes=100,
         K=1602,                 # number of classes (needs to be divisible by L)
         L=2,                   # number of labels
-        D=512,                   # dimension of inputs
+        D=512*2,                   # dimension of inputs
         subD=32,                # dimension of subvectors (for partial exposure paradigm)
         alpha=0.,               # zipf exponent
         eps=0.01,                # within-class variance (higher => more ICL)
