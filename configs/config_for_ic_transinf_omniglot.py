@@ -6,7 +6,7 @@ config = dd(dict(
         pos_dim=64,
         emb_dim=512*2,
         n_heads=4,
-        n_blocks=3,
+        n_blocks=2,
         include_mlp=False,
         activation='relu',              # activation fn for the MLP
         n_mlp_layers=None,              # TODO: make this mutable
@@ -37,7 +37,7 @@ config = dd(dict(
         Nmax=32,
     )),
     seq=dd(dict(
-        ways=5,                  # number of classes in a few-shot task
+        ways=7,                  # number of classes in a few-shot task
         shots=1,
         N=None,  # (ways*shots) sequence length will be 3N + 2 (note this must be at least ways*shots, actually currently exactly ways*shots)
         B=4,
