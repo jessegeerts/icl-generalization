@@ -16,6 +16,8 @@ from main_utils import log_att_weights
 from models import Transformer
 from utils import dotdict as dd, MyIterableDataset, update_nested_config
 from plotting_utils import plot_and_log_matrix
+import matplotlib.pyplot as plt
+from plotting_utils import TI_per_pair_plot
 
 
 torch.set_num_threads(4)
@@ -167,11 +169,11 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
             else:
                 label = holdout_batch['label'][:, -1].float().view(-1, 1)
 
-            holdout_loss, holdout_accuracy, out_dict_eval = \
+            holdout_loss, holdout_accuracy, out_dict_eval, prediction = \
                 eval_loss_and_accuracy(model, holdout_batch, label, criterion, cfg)
             print(f'holdout loss: {holdout_loss}, holdout accuracy: {holdout_accuracy}')
             if cfg.log.log_to_wandb:
-                wandb.log({'holdout_loss': holdout_loss.item(), 'holdout_accuracy': holdout_accuracy.item(), 'iter': n})
+                wandb.log({'holdout_loss': holdout_loss.item(), 'holdout_accuracy': holdout_accuracy.item(), 'output_mean': prediction.mean().item(), 'iter': n})
             metrics['holdout_accuracy'].append(holdout_accuracy.item())
             metrics['loss'].append(loss.item())
             if cfg.save_weights:
@@ -185,28 +187,10 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
                 plot_and_log_matrix(cfg, correct_matrix, n, ranks, ranks, 'hot', 0, 1, 'Correct Matrix')
                 plot_and_log_matrix(cfg, pred_matrix, n, ranks, ranks, 'coolwarm', -1, 1, 'Pred Matrix')
 
-                # Initialize a dictionary to store the mean accuracies for each absolute distance
-                mean_accuracies = {}
-                mean_preds = {}
-                # Calculate the mean accuracy and output for each distance
-                for distance in range(-cfg.seq.ways + 1, cfg.seq.ways):
-                    # Get the elements in the diagonal at the current absolute distance
-                    diagonal_elements = torch.diagonal(correct_matrix, offset=distance)
-                    diagonal_pred = torch.diagonal(pred_matrix, offset=distance)
-                    # Calculate the mean accuracy
-                    mean_accuracy = torch.mean(diagonal_elements)
-                    mean_pred = torch.mean(diagonal_pred)
-                    # Store the mean accuracy in the dictionary
-                    mean_accuracies[distance] = mean_accuracy.item()
-                    mean_preds[distance] = mean_pred.item()
-
-                metrics['accuracies'].append(mean_accuracies)
-                metrics['predictions'].append(mean_preds)
-
-                for distance, accuracy in mean_accuracies.items():
-                    if cfg.log.log_to_wandb:
-                        wandb.log({f"mean_accuracy_distance_{distance}": accuracy, 'iter': n})
-                        wandb.log({f"mean_pred_distance_{distance}": mean_preds[distance], 'iter': n})
+                fig, ax = plt.subplots()
+                TI_per_pair_plot(pred_matrix.cpu().numpy(), ax=ax)
+                wandb.log({'TI_per_pair_plot': wandb.Image(fig), 'iter': n})
+                plt.close(fig)
 
             # calculate the induction strength of each L2 head
             # this is the difference in attention weights from the query to the correct keys - the incorrect keys
@@ -305,7 +289,7 @@ def eval_loss_and_accuracy(mod, inputs, labels, criterion, config):
         predicted_labels = torch.sign(y_hat)
     accuracy = (predicted_labels == labels).float().mean()
 
-    return loss, accuracy, out_dict
+    return loss, accuracy, out_dict, y_hat
 
 
 if __name__ == '__main__':

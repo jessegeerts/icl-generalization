@@ -50,11 +50,11 @@ config = dd(dict(
     )),
     train=dd(dict(
         batch_size=128,
-        learning_rate=0.00000738788057634086,
-        w_decay=0.00000279305330027272,           # L2 regularisation parameter
+        learning_rate=7e-6,
+        w_decay=5e-6,           # L2 regularisation parameter
         lr_scheduler='warmup_constant',
         warmup_steps=4602,
-        niters=250000,
+        niters=100000,
         steps_above_criterion=10,
     )),
     log=dd(dict(
