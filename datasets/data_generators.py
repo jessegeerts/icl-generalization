@@ -853,7 +853,7 @@ class TransInfSeqGenerator:
         # last 20% of classes are test classes
         self.test_classes = self.classes[int(0.8 * len(self.classes)):]
 
-    def get_fewshot_order_seq(self, n_classes, shots, query_distance=1, mode='train', set_query_ranks=None, train_distal=False, include_forward=True, include_reverse=False, mixed_forward_reverse=False):
+    def get_fewshot_order_seq(self, n_classes, shots, query_distance=1, mode='train', set_query_ranks=None, train_distal=False, include_forward=True, include_reverse=False, mix_forward_reverse=False):
         """Generate a sequence of examples for a few-shot ordering task. Labels
         can be 1 or -1 depending on whether the second example is greater or
         less than the first example.
@@ -898,7 +898,7 @@ class TransInfSeqGenerator:
                 for i in range(n_classes-1):
                     id1 = i
                     id2 = (i + 1) % n_classes
-                    if mixed_forward_reverse:
+                    if mix_forward_reverse:
                         if np.random.rand() < 0.5:
                             context.append((classes[id1], classes[id2], 1 if id1 < id2 else -1))
                         else:
