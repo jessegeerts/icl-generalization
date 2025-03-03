@@ -883,7 +883,7 @@ class TransInfSeqGenerator:
             raise ValueError('mode must be either "train" or "test"')
         def generator(query_distance=query_distance, p_flip=p_flip, set_query_ranks=set_query_ranks, train_distal=train_distal, mode=mode):
             while True:
-                include_reverse = False
+                include_reverse = True
                 if mode == 'train':
                     classes = np.random.choice(self.train_classes, size=n_classes, replace=False)
                     if train_distal:
