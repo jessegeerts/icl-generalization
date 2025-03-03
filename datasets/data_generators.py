@@ -853,7 +853,7 @@ class TransInfSeqGenerator:
         # last 20% of classes are test classes
         self.test_classes = self.classes[int(0.8 * len(self.classes)):]
 
-    def get_fewshot_order_seq(self, n_classes, shots, query_distance=1, mode='train', set_query_ranks=None, train_distal=False):
+    def get_fewshot_order_seq(self, n_classes, shots, query_distance=1, mode='train', set_query_ranks=None, train_distal=False, include_forward=True, include_reverse=False):
         """Generate a sequence of examples for a few-shot ordering task. Labels
         can be 1 or -1 depending on whether the second example is greater or
         less than the first example.
@@ -883,7 +883,6 @@ class TransInfSeqGenerator:
             raise ValueError('mode must be either "train" or "test"')
         def generator(query_distance=query_distance, p_flip=p_flip, set_query_ranks=set_query_ranks, train_distal=train_distal, mode=mode):
             while True:
-                include_reverse = False
                 if mode == 'train':
                     classes = np.random.choice(self.train_classes, size=n_classes, replace=False)
                     if train_distal:
@@ -899,7 +898,8 @@ class TransInfSeqGenerator:
                 for i in range(n_classes-1):
                     id1 = i
                     id2 = (i + 1) % n_classes
-                    context.append((classes[id1], classes[id2], 1 if id1 < id2 else -1))  # in the context, there are only adjacent pairs
+                    if include_forward:
+                        context.append((classes[id1], classes[id2], 1 if id1 < id2 else -1))  # in the context, there are only adjacent pairs
                     if include_reverse:
                         context.append((classes[id2], classes[id1], 1 if id2 < id1 else -1))
                 # repeat the context for the number of shots

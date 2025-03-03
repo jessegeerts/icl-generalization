@@ -46,7 +46,9 @@ config = dd(dict(
         train_seq_type='order',
         train_type='IC',
         include_flipped=False,
-        include_distal_in_training=False  # we train only on adjacent pairs
+        include_distal_in_training=False,
+        include_forward=True,
+        include_reverse=True
     )),
     train=dd(dict(
         batch_size=128,

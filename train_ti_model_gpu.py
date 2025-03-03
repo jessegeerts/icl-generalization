@@ -69,8 +69,10 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
     if cfg.seq.train_seq_type == 'order':
         # todo: we can swap this for "in-weight" sequences with constant mapping
         train_generator = partial(seqgen.get_fewshot_order_seq, cfg.seq.ways, cfg.seq.shots, mode='train',
-                                  train_distal=cfg.seq.include_distal_in_training)
-        holdout_generator = partial(seqgen.get_fewshot_order_seq, cfg.seq.ways, cfg.seq.shots, mode='test')
+                                  train_distal=cfg.seq.include_distal_in_training,
+                                  include_forward=cfg.seq.include_forward, include_reverse=cfg.seq.include_reverse)
+        holdout_generator = partial(seqgen.get_fewshot_order_seq, cfg.seq.ways, cfg.seq.shots, mode='test',
+                                    include_forward=cfg.seq.include_forward, include_reverse=cfg.seq.include_reverse)
         # fixme: this is just a placeholder for now
         iwl_generator = seqgen.get_fewshot_order_seq(cfg.seq.ways, cfg.seq.shots)
     elif cfg.seq.train_seq_type == 'ABBB':
