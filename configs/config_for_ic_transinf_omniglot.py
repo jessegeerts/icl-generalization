@@ -47,9 +47,9 @@ config = dd(dict(
         train_type='IC',
         include_flipped=False,
         include_distal_in_training=False,
-        include_forward=True,
+        include_forward=False,
         include_reverse=True,
-        mix_forward_reverse=True
+        mix_forward_reverse=False
     )),
     train=dd(dict(
         batch_size=128,

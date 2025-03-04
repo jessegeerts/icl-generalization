@@ -195,6 +195,14 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
                 TI_per_pair_plot(pred_matrix.cpu().numpy(), ax=ax)
                 wandb.log({'TI_per_pair_plot': wandb.Image(fig), 'iter': n})
                 plt.close(fig)
+                fig, ax = plt.subplots()
+                TI_per_pair_plot(correct_matrix.cpu().numpy(), ax=ax)
+                plt.ylabel('Accuracy')
+                plt.title('Accuracy')
+                wandb.log({'TI_per_pair_plot': wandb.Image(fig), 'iter': n})
+                plt.close(fig)
+
+
 
             # calculate the induction strength of each L2 head
             # this is the difference in attention weights from the query to the correct keys - the incorrect keys
