@@ -68,7 +68,7 @@ config = dd(dict(
         wandb_project="in-context-trans-inf-hyperparam-search",
         run_name=None
     )),
-    save_weights=False,
+    save_weights=True,
     save_model=False,
     eval_at_all_distances=True,
     seed=1

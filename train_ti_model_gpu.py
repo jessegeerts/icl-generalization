@@ -198,7 +198,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
 
             # calculate the induction strength of each L2 head
             # this is the difference in attention weights from the query to the correct keys - the incorrect keys
-            calc_induction_strength = False
+            calc_induction_strength = True
             if calc_induction_strength:
                 calculate_induction_strength(cfg, holdout_batch, n, out_dict_eval)
 
@@ -266,8 +266,30 @@ def eval_at_all_distances(cfg, dataloader, device, iterdataset, model, n, get_hi
         return correct_matrix, holdout_batch, pred_matrix, ranks
 
 
+def find_matching_pairs(examples):
+    batch_size = examples.shape[0]
+    result = torch.zeros(batch_size, dtype=torch.long)
+
+    # For each example in the batch
+    for b in range(batch_size):
+        final_pair = examples[b, -2:]
+
+        # Check each potential pair in the sequence
+        for i in range(0, examples.shape[1] - 2, 2):
+            current_pair = examples[b, i:i + 2]
+
+            # If this pair matches the final pair
+            if torch.equal(current_pair, final_pair):
+                result[b] = i // 2
+                break
+
+    return result
+
+
 def calculate_induction_strength(cfg, holdout_batch, n, out_dict_eval):
-    correct_ids = holdout_batch['label'][:, :-1] == holdout_batch['label'][:, -1].view(1, 128).T
+    matching_idx = find_matching_pairs(holdout_batch['example'])
+    correct_ids = matching_idx + 1
+    # correct_ids = holdout_batch['label'][:, :-1] == holdout_batch['label'][:, -1].view(1, 128).T
     for h in range(cfg.model.n_heads):
         attn_weights = out_dict_eval[f'block_1']['weights'][:, h, :, :]
         # only get every second column, starting from the second
