@@ -208,10 +208,10 @@ def main(config):
                     wandb.log({'test_accuracy': test_accuracy.item(), 'iter': n})
                     if config.save_weights:
                         fig1, ax1 = plt.subplots()
-                        ax1.imshow(out_dict['block_0']['weights'].mean(axis=0).squeeze(), cmap=ATTENTION_CMAP)
+                        ax1.imshow(out_dict['block_0']['weights'].cpu().mean(axis=0).squeeze(), cmap=ATTENTION_CMAP)
                         wandb.log({'l0_attn_map_test': fig1, 'iter': n})  # note: now we're logging the mean of the attention weights across data points
                         fig2, ax2 = plt.subplots()
-                        ax2.imshow(out_dict['block_1']['weights'].mean(axis=0).squeeze(), cmap=ATTENTION_CMAP)
+                        ax2.imshow(out_dict['block_1']['weights'].cpu().mean(axis=0).squeeze(), cmap=ATTENTION_CMAP)
                         wandb.log({'l1_attn_map_test': fig2, 'iter': n})
                         plt.close('all')
 
