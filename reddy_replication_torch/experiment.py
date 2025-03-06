@@ -108,6 +108,7 @@ def main(config):
     # determine the frequency of different classes
     p_class = 1.0 / (np.arange(1, K + 1) ** alpha)
     p_class /= np.sum(p_class)
+    no_repeats = False
 
     if custom_model:
         mod_name = 'custom'
@@ -138,18 +139,21 @@ def main(config):
     print(experiment_name)
     if config.log_to_wandb:
         wandb.login(key=WANDB_KEY)
-        wandb.init(project="BlockedInterleaved", name=experiment_name, config=config)
+        wandb.init(project="reddy-replication", name=experiment_name, config=config)
     # Loading datasets
+
     mus_label, mus_class, labels_class = get_mus_label_class(K, L, D)
-    test_inputs, test_labels = generate_input_seqs(mus_label, mus_class, labels_class, S, N, Nmax, eps=eps, P=p_class,
+    test_inputs, test_labels = generate_input_seqs_TI(mus_label, mus_class, labels_class, S, N, Nmax, eps=eps, P=p_class,
                                                    B=B,
-                                                   p_B=pB, p_C=pC, no_repeats=True)
+                                                   p_B=pB, p_C=pC, no_repeats=no_repeats)
+    # test_inputs_TI, test_labels_TI = generate_input_seqs_TI(mus_label, mus_class, labels_class, S, N, Nmax, eps=eps,
+    #                                                   B=B, p_B=pB, p_C=pC, no_repeats=no_repeats)
     test_inputs_ic, test_labels_ic = generate_input_seqs(mus_label, mus_class, labels_class, S, N, Nmax, eps=eps,
                                                          P=p_class,
-                                                         B=B, p_B=1, p_C=1, no_repeats=True)
+                                                         B=B, p_B=1, p_C=1, no_repeats=no_repeats)
     test_inputs_iw, test_labels_iw = generate_input_seqs(mus_label, mus_class, labels_class, S, N, Nmax, eps=eps,
                                                          P=p_class,
-                                                         B=0, p_B=0, p_C=0, no_repeats=True)
+                                                         B=0, p_B=0, p_C=0, no_repeats=no_repeats)
     # cast to torch tensor
     test_inputs_ic = torch.from_numpy(np.array(test_inputs_ic)).float().to(device)
     test_inputs_iw = torch.from_numpy(np.array(test_inputs_iw)).float().to(device)
@@ -172,29 +176,22 @@ def main(config):
         model.train()
 
         # load in a batch of data
-        # dataload_start = time.time()
-        inputs_batch, labels_batch, target_classes = generate_input_seqs(mus_label, mus_class, labels_class,
+        inputs_batch, labels_batch, target_classes = generate_input_seqs_TI(mus_label, mus_class, labels_class,
                                                                          config.train.batch_size, N, Nmax,
                                                                          eps=eps, P=p_class, B=B, p_B=pB, p_C=pC,
-                                                                         output_target_labels=True, no_repeats=True)
+                                                                         output_target_labels=True, no_repeats=no_repeats)
         # cast to torch tensor (TODO: there's gotta be a better way to do this)
         inputs_batch = torch.from_numpy(inputs_batch).float().to(device)
         labels_batch = torch.from_numpy(np.array(labels_batch)).to(device)
-        # dataload_end = time.time()
-        # print(f'time to load data: {dataload_end-dataload_start}')
 
         optimizer.zero_grad()
         # forward_pass_start = time.time()
         y_hat, out_dict = model(inputs_batch)
-        # forward_pass_end = time.time()
-        # print(f'time taken for forward pass: {forward_pass_end-forward_pass_start}')
 
         # optimizer_start = time.time()
         loss = criterion(y_hat, torch.argmax(labels_batch.float(), dim=-1))
         loss.backward()
         optimizer.step()
-        # optimizer_end = time.time()
-        # print(f'time taken for backward pass: {optimizer_end-optimizer_start}')
 
         # evaluate on ICL, IWL etc
 

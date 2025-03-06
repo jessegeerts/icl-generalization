@@ -18,16 +18,16 @@ config = dd(dict(
     data=dd(dict(
         S=10000,
         K=2**10,                 # number of classes
-        L=32,                   # number of labels
+        L=2,                   # number of labels
         D=63,                   # dimension of inputs
         alpha=0.,               # zipf exponent
-        eps=0.75,                # within-class variance (higher => more ICL)
+        eps=0.,                # within-class variance (higher => more ICL)
     )),
     seq=dd(dict(
         N=8,                   # sequence length will be 2N + 1
-        B=4,
+        B=1,
         pB=1.,
-        pC=0.,
+        pC=1.,
         shuf=True,
     )),
     train=dd(dict(

@@ -15,18 +15,18 @@ from jax import random
 
 #D is the dimensionality of the samples and labels.
 
-#B is burstiness, which controls how many copies of the target are present in the input. N has to be divisible by B. B = 0 chooses randomly. 
+#B is burstiness, which controls how many copies of the target are present in the input. N has to be divisible by B. B = 0 chooses randomly.
 
-#p_B is the fraction of bursty sequences. 
+#p_B is the fraction of bursty sequences.
 
-#P is the probability distribution that a particular label is chosen as the target. 
+#P is the probability distribution that a particular label is chosen as the target.
 #By default, this is uniform across the K labels.
 
 #The input dimension is 2*N + 1 + D
 
 
 def get_mus_label_class(K,L,D):
-    
+
     mus_label = np.random.normal(size = (L,D))/np.sqrt(D)  # why is mus_label L by D?
     mus_class = np.random.normal(size = (K,D))/np.sqrt(D)
     if K < L or K%L != 0:
@@ -38,12 +38,12 @@ def get_mus_label_class(K,L,D):
 
 def generate_targets_only(mus_label, mus_class, labels_class,S, eps= 0.1, P = None):
     e_fac = 1/np.sqrt(1+eps**2)
-    
+
     L = mus_label.shape[0]
     K = mus_class.shape[0]
     D = mus_label.shape[1]
 
-    inputs = np.ones((S,D)) 
+    inputs = np.ones((S,D))
 
     if P is None or len(P) != K:
         P = np.ones(K)/K
@@ -56,12 +56,12 @@ def generate_targets_only(mus_label, mus_class, labels_class,S, eps= 0.1, P = No
 
     for s in range(S):
         labels[s,labels_class[targets[s]]] = True
-    
+
     return jnp.array(inputs), jnp.array(labels)
 
 def generate_input_seqs(mus_label, mus_class, labels_class,S, N, Nmax, eps= 0.1, B = 0, p_B = 0, P = None, p_C = 0, flip_labels = False, output_target_labels = False, no_repeats = False, shuffle=True):
     e_fac = 1/np.sqrt(1+eps**2)
-    
+
     L = mus_label.shape[0]
     K = mus_class.shape[0]
     D = mus_label.shape[1]
@@ -73,13 +73,13 @@ def generate_input_seqs(mus_label, mus_class, labels_class,S, N, Nmax, eps= 0.1,
         print("K > L and K%L == 0 is required")
         return 0
     labels_class_new =  np.tile(np.arange(L),int(K_c/L))
-    
+
     inputs = np.zeros((S,2*N+1,2*Nmax+1 + D))
 
     if P is None or len(P) != K:
         P = np.ones(K)/K
 
-    #N has to be divisible by B as we will have N/B copies of each label in the context. 
+    #N has to be divisible by B as we will have N/B copies of each label in the context.
     if (B > 0 and N%B != 0) or B >= N:
         print("N is not divisible by B or N/B is not even or B >= N")
         return 0,0
@@ -131,7 +131,7 @@ def generate_input_seqs(mus_label, mus_class, labels_class,S, N, Nmax, eps= 0.1,
     #print(np.arange(S)[~filt_B])
 
     inputs[filt_C,:-1:2,2*Nmax+1:] = (e_fac*(mus_class[choices] + eps*np.random.normal(size = (S,N,D))/np.sqrt(D)))[filt_C]
-    
+
     if flip_labels:
         wrong_label = (labels_class + 1)%L
         inputs[filt_C,1:-1:2,2*Nmax+1:] = ((mus_label[wrong_label])[choices])[filt_C]
@@ -145,7 +145,7 @@ def generate_input_seqs(mus_label, mus_class, labels_class,S, N, Nmax, eps= 0.1,
     inputs[~filt_C,-1,2*Nmax+1:] = (e_fac*(mus_class_new[targets_c] + eps*np.random.normal(size = (S,D))/np.sqrt(D)))[~filt_C]
 
     shifts = np.random.choice((2*Nmax + 1) - (2*N + 1) + 1, size = (S))
-    
+
     labels = np.zeros((S,L),dtype= bool)
     target_classes = np.zeros(S, dtype = int)
 
@@ -158,6 +158,80 @@ def generate_input_seqs(mus_label, mus_class, labels_class,S, N, Nmax, eps= 0.1,
             target_classes[s] = -1
 
         inputs[s,:,shifts[s]:shifts[s] + 2*N+1] = np.identity(2*N+1)
+
+    if output_target_labels:
+        return np.array(inputs), jnp.array(labels), target_classes
+    else:
+        return jnp.array(inputs), jnp.array(labels)
+
+
+def generate_input_seqs_TI(mus_label, mus_class, labels_class, S, N, Nmax, eps=0.1, B=0, p_B=0, P=None, p_C=0,
+                        flip_labels=False, output_target_labels=False, no_repeats=False, shuffle=True):
+    e_fac = 1 / np.sqrt(1 + eps ** 2)
+
+    L = mus_label.shape[0]  # number of labels. we could assign a different "bigger than" or "smaller than" label for each specific sequence
+    assert L == 2
+    K = mus_class.shape[0]
+    D = mus_label.shape[1]
+
+    N_items = 7
+    N_pairwise = (N_items - 1) * 2
+    seq_len = N_pairwise * 2 + 1
+
+    K_c = 128  # number of classes to draw from in the fewshot sequences
+    mus_class_new = np.random.normal(size=(K_c, D // 2)) / np.sqrt(D)
+
+    if K_c < L or K_c % L != 0:
+        print("K > L and K%L == 0 is required")
+        return 0
+    labels_class_new = np.tile(np.arange(L), int(K_c / L))
+
+    inputs = np.zeros((S, seq_len, 2 * Nmax + 1 + D))
+
+    item_choices_c = np.random.choice(np.arange(K_c), size=(S, N_items))  # here we choose the classes for the few-shot seqs
+    [np.random.shuffle(x) for x in item_choices_c]
+
+    item_1_choices_c = np.concatenate([item_choices_c[:, :-1], item_choices_c[:, :-1][:, ::-1]], axis=-1)
+    item_2_choices_c = np.concatenate([item_choices_c[:, 1:], item_choices_c[:, 1:][:, ::-1]], axis=-1)  # note: these are now always in the same order ,with first all forward pairs and then all reverse pairs
+    label_choices_c = np.tile(np.repeat(np.arange(2), N_pairwise//2), (S, 1))
+
+    random_ordering = np.array([np.random.permutation(N_pairwise) for _ in range(S)])
+    item_1_choices_c = item_1_choices_c[np.arange(S)[:, None], random_ordering]
+    item_2_choices_c = item_2_choices_c[np.arange(S)[:, None], random_ordering]
+    label_choices_c = label_choices_c[np.arange(S)[:, None], random_ordering]
+
+    targets_c_ind = np.random.choice(item_1_choices_c.shape[1], size=(item_1_choices_c.shape[0],))
+    targets_c_1 = item_1_choices_c[np.arange(item_1_choices_c.shape[0]), targets_c_ind]
+    targets_c_2 = item_2_choices_c[np.arange(item_1_choices_c.shape[0]), targets_c_ind]
+
+    filt_C = np.random.uniform(size=S) > p_C
+
+    # JPG: for each ~filt_C we fill in new few shot seqs?
+    inputs[~filt_C, :-1:2, 2 * Nmax + 1:-D//2] = \
+    (e_fac * (mus_class_new[item_1_choices_c] + eps * np.random.normal(size=(S, N_pairwise, D//2)) / np.sqrt(D)))[~filt_C]
+    inputs[~filt_C, :-1:2, 2 * Nmax + 1 + D//2:-1] = \
+    (e_fac * (mus_class_new[item_2_choices_c] + eps * np.random.normal(size=(S, N_pairwise, D//2)) / np.sqrt(D)))[~filt_C]
+
+    inputs[~filt_C, 1:-1:2, 2 * Nmax + 1:] = ((mus_label[label_choices_c]))[~filt_C]
+
+    inputs[~filt_C, -1, 2 * Nmax + 1:-D//2] = \
+    (e_fac * (mus_class_new[targets_c_1] + eps * np.random.normal(size=(S, D//2)) / np.sqrt(D)))[~filt_C]
+    inputs[~filt_C, -1, 2 * Nmax + 1 + D//2:-1] = \
+    (e_fac * (mus_class_new[targets_c_2] + eps * np.random.normal(size=(S, D//2)) / np.sqrt(D)))[~filt_C]
+
+    shifts = np.random.choice((2 * Nmax + 1) - (2 * N + 1) + 1, size=(S))
+
+    labels = np.zeros((S, L), dtype=bool)
+    target_classes = np.zeros(S, dtype=int)
+
+    for s in range(S):
+        if not filt_C[s]:
+            labels[s, label_choices_c[s, targets_c_ind[s]]] = True
+            target_classes[s] = -1
+        else:
+            raise NotImplementedError('This should not happen')
+
+        inputs[s, :, shifts[s]:shifts[s] + seq_len] = np.identity(seq_len)
 
     if output_target_labels:
         return np.array(inputs), jnp.array(labels), target_classes
