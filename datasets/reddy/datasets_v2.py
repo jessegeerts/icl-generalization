@@ -59,6 +59,7 @@ def generate_targets_only(mus_label, mus_class, labels_class,S, eps= 0.1, P = No
 
     return jnp.array(inputs), jnp.array(labels)
 
+
 def generate_input_seqs(mus_label, mus_class, labels_class,S, N, Nmax, eps= 0.1, B = 0, p_B = 0, P = None, p_C = 0, flip_labels = False, output_target_labels = False, no_repeats = False, shuffle=True):
     e_fac = 1/np.sqrt(1+eps**2)
 
@@ -87,6 +88,9 @@ def generate_input_seqs(mus_label, mus_class, labels_class,S, N, Nmax, eps= 0.1,
     if B == 0:
         B = int(N/2)
         p_B = 0
+
+    if L < N and no_repeats:
+        raise ValueError('L < N is not possible in no_repeats mode')
 
     choices = np.zeros((S,int(N/B)), dtype = int)
     if no_repeats:
@@ -166,11 +170,15 @@ def generate_input_seqs(mus_label, mus_class, labels_class,S, N, Nmax, eps= 0.1,
 
 
 def generate_input_seqs_TI(mus_label, mus_class, labels_class, S, N, Nmax, eps=0.1, B=0, p_B=0, P=None, p_C=0,
-                        flip_labels=False, output_target_labels=False, no_repeats=False, shuffle=True):
+                        flip_labels=False, output_target_labels=False, no_repeats=False, shuffle=True, query_pos=None):
+
+    if query_pos is None:
+        random_query = True
+
     e_fac = 1 / np.sqrt(1 + eps ** 2)
 
     L = mus_label.shape[0]  # number of labels. we could assign a different "bigger than" or "smaller than" label for each specific sequence
-    assert L == 2
+
     K = mus_class.shape[0]
     D = mus_label.shape[1]
 
@@ -180,46 +188,55 @@ def generate_input_seqs_TI(mus_label, mus_class, labels_class, S, N, Nmax, eps=0
 
     K_c = 128  # number of classes to draw from in the fewshot sequences
     mus_class_new = np.random.normal(size=(K_c, D // 2)) / np.sqrt(D)
+    label_mapping_index = np.random.randint(0, L//2, size=(S, 1))
 
     if K_c < L or K_c % L != 0:
         print("K > L and K%L == 0 is required")
         return 0
-    labels_class_new = np.tile(np.arange(L), int(K_c / L))
 
     inputs = np.zeros((S, seq_len, 2 * Nmax + 1 + D))
 
-    item_choices_c = np.random.choice(np.arange(K_c), size=(S, N_items))  # here we choose the classes for the few-shot seqs
-    [np.random.shuffle(x) for x in item_choices_c]
+    # item_choices_c = np.random.choice(np.arange(K_c), size=(S, N_items), replace=False)  # here we choose the classes for the few-shot seqs
+    item_choices_c = np.array([np.random.choice(np.arange(K_c), size=N_items, replace=False) for _ in range(S)])
 
-    item_1_choices_c = np.concatenate([item_choices_c[:, :-1], item_choices_c[:, :-1][:, ::-1]], axis=-1)
-    item_2_choices_c = np.concatenate([item_choices_c[:, 1:], item_choices_c[:, 1:][:, ::-1]], axis=-1)  # note: these are now always in the same order ,with first all forward pairs and then all reverse pairs
+    item_1_choices_c = np.concatenate([item_choices_c[:, :-1], item_choices_c[:, 1:]], axis=-1)
+    item_2_choices_c = np.concatenate([item_choices_c[:, 1:], item_choices_c[:, :-1]], axis=-1)  # note: these are now always in the same order ,with first all forward pairs and then all reverse pairs
     label_choices_c = np.tile(np.repeat(np.arange(2), N_pairwise//2), (S, 1))
+
+    converted_label_choices_c = np.zeros_like(label_choices_c)
+    converted_label_choices_c = np.where((label_choices_c==1), label_mapping_index, converted_label_choices_c)
+    converted_label_choices_c = np.where((label_choices_c==0), label_mapping_index + L//2, converted_label_choices_c)
 
     random_ordering = np.array([np.random.permutation(N_pairwise) for _ in range(S)])
     item_1_choices_c = item_1_choices_c[np.arange(S)[:, None], random_ordering]
     item_2_choices_c = item_2_choices_c[np.arange(S)[:, None], random_ordering]
-    label_choices_c = label_choices_c[np.arange(S)[:, None], random_ordering]
+    label_choices_c = converted_label_choices_c[np.arange(S)[:, None], random_ordering]
 
-    targets_c_ind = np.random.choice(item_1_choices_c.shape[1], size=(item_1_choices_c.shape[0],))
-    targets_c_1 = item_1_choices_c[np.arange(item_1_choices_c.shape[0]), targets_c_ind]
-    targets_c_2 = item_2_choices_c[np.arange(item_1_choices_c.shape[0]), targets_c_ind]
+    if random_query:
+        targets_c_ind = np.random.choice(item_1_choices_c.shape[1], size=(item_1_choices_c.shape[0],))
+        targets_c_1 = item_1_choices_c[np.arange(item_1_choices_c.shape[0]), targets_c_ind]
+        targets_c_2 = item_2_choices_c[np.arange(item_1_choices_c.shape[0]), targets_c_ind]
+    else:
+        targets_c_1 =item_choices_c[np.arange(item_choices_c.shape[0]), query_pos[0]]
+        targets_c_2 = item_choices_c[np.arange(item_choices_c.shape[0]), query_pos[1]]
+
 
     filt_C = np.random.uniform(size=S) > p_C
 
     # JPG: for each ~filt_C we fill in new few shot seqs?
     inputs[~filt_C, :-1:2, 2 * Nmax + 1:-D//2] = \
-    (e_fac * (mus_class_new[item_1_choices_c] + eps * np.random.normal(size=(S, N_pairwise, D//2)) / np.sqrt(D)))[~filt_C]
+    (e_fac * (mus_class_new[item_1_choices_c] + eps * np.random.normal(size=(S, N_pairwise, D//2)) / np.sqrt(D//2)))[~filt_C]
     inputs[~filt_C, :-1:2, 2 * Nmax + 1 + D//2:-1] = \
-    (e_fac * (mus_class_new[item_2_choices_c] + eps * np.random.normal(size=(S, N_pairwise, D//2)) / np.sqrt(D)))[~filt_C]
+    (e_fac * (mus_class_new[item_2_choices_c] + eps * np.random.normal(size=(S, N_pairwise, D//2)) / np.sqrt(D//2)))[~filt_C]
 
     inputs[~filt_C, 1:-1:2, 2 * Nmax + 1:] = ((mus_label[label_choices_c]))[~filt_C]
 
     inputs[~filt_C, -1, 2 * Nmax + 1:-D//2] = \
-    (e_fac * (mus_class_new[targets_c_1] + eps * np.random.normal(size=(S, D//2)) / np.sqrt(D)))[~filt_C]
+    (e_fac * (mus_class_new[targets_c_1] + eps * np.random.normal(size=(S, D//2)) / np.sqrt(D//2)))[~filt_C]
     inputs[~filt_C, -1, 2 * Nmax + 1 + D//2:-1] = \
-    (e_fac * (mus_class_new[targets_c_2] + eps * np.random.normal(size=(S, D//2)) / np.sqrt(D)))[~filt_C]
+    (e_fac * (mus_class_new[targets_c_2] + eps * np.random.normal(size=(S, D//2)) / np.sqrt(D//2)))[~filt_C]
 
-    shifts = np.random.choice((2 * Nmax + 1) - (2 * N + 1) + 1, size=(S))
+    shifts = np.random.choice((2 * Nmax + 1) - seq_len + 1, size=(S))
 
     labels = np.zeros((S, L), dtype=bool)
     target_classes = np.zeros(S, dtype=int)
@@ -231,7 +248,20 @@ def generate_input_seqs_TI(mus_label, mus_class, labels_class, S, N, Nmax, eps=0
         else:
             raise NotImplementedError('This should not happen')
 
+        if shifts[s] + seq_len > 2 * Nmax + 1:
+            print('Warning: sequence too long for buffer')
         inputs[s, :, shifts[s]:shifts[s] + seq_len] = np.identity(seq_len)
+
+    # test if sequences is correct (only works for eps=0)
+    if eps == 0:
+        for s in range(S):
+            first_seq = inputs[s][:, 2 * Nmax + 1:]
+            if not np.all(first_seq[:-1] == first_seq[-1], axis=1).sum() == 1:
+                print('warning: egeg ')
+            target_idx = np.all(first_seq[:-1] ==first_seq[-1], axis=1).argmax()
+            target_label = np.all(first_seq[target_idx+1] == mus_label, axis=1).argmax()
+            if not target_label == labels[s].argmax():
+                raise ValueError('Target label not found')
 
     if output_target_labels:
         return np.array(inputs), jnp.array(labels), target_classes

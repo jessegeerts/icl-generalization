@@ -11,24 +11,27 @@ config = dd(dict(
         n_mlp_layers=None,              # TODO: make this mutable
         apply_ln=False,
         widening_factor=1,              # how much wider is the MLP hidden dim
-        max_T=32,                       # max sequence length for the model
+        max_T=64,                       # max sequence length for the model
         out_dim=None,                    # note this is set later (dependent on N labels in data)
         drop_p=0.0
     )),
     data=dd(dict(
         S=10000,
         K=2**10,                 # number of classes
-        L=2,                   # number of labels
+        L=32,                   # number of labels
         D=63,                   # dimension of inputs
         alpha=0.,               # zipf exponent
-        eps=0.,                # within-class variance (higher => more ICL)
+        eps=0,                # within-class variance (higher => more ICL)
     )),
     seq=dd(dict(
-        N=8,                   # sequence length will be 2N + 1
+        N=12,                   # sequence length will be 2N + 1
+        Nmax=32,
         B=1,
         pB=1.,
         pC=1.,
         shuf=True,
+        train_type='cat',
+        no_repeats=False
     )),
     train=dd(dict(
         batch_size=128,
@@ -40,5 +43,5 @@ config = dd(dict(
     )),
     log_to_wandb=True,
     logging_interval=500,  # iterations
-    save_weights=True
+    save_weights=True,
 ))

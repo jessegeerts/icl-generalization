@@ -104,18 +104,18 @@ def main(config):
     B = config.seq.B
     pB = config.seq.pB
     pC = config.seq.pC
-    Nmax = 32  # this is fixed.
+    Nmax = config.seq.Nmax  # this is fixed.
     # determine the frequency of different classes
     p_class = 1.0 / (np.arange(1, K + 1) ** alpha)
     p_class /= np.sum(p_class)
-    no_repeats = False
+    no_repeats = config.seq.no_repeats
 
     if custom_model:
         mod_name = 'custom'
     else:
         mod_name = 'inbuilt'
     ln = config.model.apply_ln if mod_name == 'custom' else True
-    nm = 'interleaved' if config.seq.shuf else 'blocked'
+    nm = config.seq.train_type
     experiment_name = '{}_I{}_K{}_N{}_L{}_D{}_a{}_B{}_pB{}_pC{}_eps{}_lr{}_drop{}_{}_ln{}_wDecay{}_{}'.format(
         nm,
         config.train.niters,
@@ -143,11 +143,17 @@ def main(config):
     # Loading datasets
 
     mus_label, mus_class, labels_class = get_mus_label_class(K, L, D)
-    test_inputs, test_labels = generate_input_seqs_TI(mus_label, mus_class, labels_class, S, N, Nmax, eps=eps, P=p_class,
-                                                   B=B,
-                                                   p_B=pB, p_C=pC, no_repeats=no_repeats)
-    # test_inputs_TI, test_labels_TI = generate_input_seqs_TI(mus_label, mus_class, labels_class, S, N, Nmax, eps=eps,
-    #                                                   B=B, p_B=pB, p_C=pC, no_repeats=no_repeats)
+    if config.seq.train_type == 'cat':
+        test_inputs, test_labels = generate_input_seqs(mus_label, mus_class, labels_class, S, N, Nmax, eps=eps,
+                                                          P=p_class,
+                                                          B=B,
+                                                          p_B=pB, p_C=pC, no_repeats=no_repeats)
+    else:
+        test_inputs, test_labels = generate_input_seqs_TI(mus_label, mus_class, labels_class, S, N, Nmax, eps=eps, P=p_class,
+                                                       B=B,
+                                                       p_B=pB, p_C=pC, no_repeats=no_repeats)
+    test_inputs_TI, test_labels_TI = generate_input_seqs_TI(mus_label, mus_class, labels_class, S, N, Nmax, eps=eps,
+                                                       B=B, p_B=pB, p_C=pC, no_repeats=no_repeats)
     test_inputs_ic, test_labels_ic = generate_input_seqs(mus_label, mus_class, labels_class, S, N, Nmax, eps=eps,
                                                          P=p_class,
                                                          B=B, p_B=1, p_C=1, no_repeats=no_repeats)
@@ -161,6 +167,8 @@ def main(config):
     test_labels_iw = torch.from_numpy(np.array(test_labels_iw)).to(device)
     test_inputs = torch.from_numpy(np.array(test_inputs)).float().to(device)
     test_labels = torch.from_numpy(np.array(test_labels)).to(device)
+    test_inputs_TI = torch.from_numpy(np.array(test_inputs_TI)).float().to(device)
+    test_labels_TI = torch.from_numpy(np.array(test_labels_TI)).to(device)
     # initialize model, optimizer, loss fn
     if custom_model:
         model = Transformer(config=config.model).to(device)  # my custom transformer encoder
@@ -176,10 +184,17 @@ def main(config):
         model.train()
 
         # load in a batch of data
-        inputs_batch, labels_batch, target_classes = generate_input_seqs_TI(mus_label, mus_class, labels_class,
-                                                                         config.train.batch_size, N, Nmax,
-                                                                         eps=eps, P=p_class, B=B, p_B=pB, p_C=pC,
-                                                                         output_target_labels=True, no_repeats=no_repeats)
+        if config.seq.train_type == 'cat':
+            inputs_batch, labels_batch, target_classes = generate_input_seqs(mus_label, mus_class, labels_class,
+                                                                             config.train.batch_size, N, Nmax,
+                                                                             eps=eps, P=p_class, B=B, p_B=pB, p_C=pC,
+                                                                             output_target_labels=True, no_repeats=no_repeats)
+        else:
+            inputs_batch, labels_batch, target_classes = generate_input_seqs_TI(mus_label, mus_class, labels_class,
+                                                                             config.train.batch_size, N, Nmax,
+                                                                             eps=eps, P=p_class, B=B, p_B=pB, p_C=pC,
+                                                                             output_target_labels=True, no_repeats=no_repeats)
+
         # cast to torch tensor (TODO: there's gotta be a better way to do this)
         inputs_batch = torch.from_numpy(inputs_batch).float().to(device)
         labels_batch = torch.from_numpy(np.array(labels_batch)).to(device)
@@ -229,6 +244,13 @@ def main(config):
                         wandb.log({'l1_attn_map_icl': fig2, 'iter': n})
                         plt.close('all')
 
+                # calculate induction strength
+                induction_strength_per_head = calculate_induction_strength(config, test_inputs, n, out_dict)
+                if config.log_to_wandb:
+                    for h in range(config.model.n_heads):
+                        induction_strength = induction_strength_per_head[h]
+                        wandb.log({f'induction_strength_icl_head_{h}': induction_strength, 'iter': n})
+
 
                 # evaluate on IWL
                 iwl_loss, iwl_accuracy, out_dict = eval_loss_and_accuracy(model, test_inputs_iw, test_labels_iw, criterion)
@@ -236,7 +258,54 @@ def main(config):
                     wandb.log({'iwl_loss': iwl_loss.item(), 'iter': n})
                     wandb.log({'iwl_accuracy': iwl_accuracy.item(), 'iter': n})
 
-                print(f'iter {n}, loss: {loss}, ic_accuracy: {icl_accuracy}, iw_accuracy: {iwl_accuracy}')
+                # evaluate on TI
+                ti_loss, ti_accuracy, out_dict_TI = eval_loss_and_accuracy(model, test_inputs_TI, test_labels_TI, criterion)
+                if config.log_to_wandb:
+                    wandb.log({'ti_loss': ti_loss.item(), 'iter': n})
+                    wandb.log({'ti_accuracy': ti_accuracy.item(), 'iter': n})
+
+                # calculate induction strength
+                induction_strength_per_head = calculate_induction_strength(config, test_inputs_TI, n, out_dict_TI)
+                if config.log_to_wandb:
+                    for h in range(config.model.n_heads):
+                        induction_strength = induction_strength_per_head[h]
+                        wandb.log({f'induction_strength_TI_head_{h}': induction_strength, 'iter': n})
+
+                print(f'iter {n}, loss: {loss}, ic_accuracy: {icl_accuracy}, iw_accuracy: {iwl_accuracy}',
+                      'ti_accuracy:', ti_accuracy.item())
+
+
+def calculate_induction_strength(cfg, holdout_batch, n, out_dict_eval):
+    ind_strngth = []
+
+    batch_wo_pos_code = holdout_batch[:, :, -config.data.D:]
+    contexts = batch_wo_pos_code[:, :-1, :]
+    queries = batch_wo_pos_code[:, -1, :]
+
+    dotprod = torch.einsum('btd,bd->bt', contexts, queries)
+    most_similar = dotprod.argmax(dim=-1)
+
+    correct_ids = most_similar + 1
+    # correct_ids = holdout_batch['label'][:, :-1] == holdout_batch['label'][:, -1].view(1, 128).T
+    for h in range(cfg.model.n_heads):
+        attn_weights = out_dict_eval[f'block_1']['weights'][:, h, :, :]
+        # only get every second column, starting from the second
+        query_attn = attn_weights[:, -1]  # get the attention weights for the query
+        batch_indices = torch.arange(10000, device=query_attn.device)
+        correct_attention = query_attn[batch_indices, correct_ids]
+
+        mask = torch.ones_like(query_attn, dtype=torch.bool)
+        mask[batch_indices, correct_ids] = False
+
+        # Get all values that are NOT the correct IDs
+        non_correct_values = query_attn[mask].reshape(10000, -1)
+
+        # Calculate the mean of non-correct values for each row
+        non_correct_means = non_correct_values.mean(dim=1)
+
+        induction_strength = correct_attention.mean() - non_correct_means.mean()
+        ind_strngth.append(induction_strength.item())
+    return ind_strngth
 
 
 if __name__ == '__main__':
