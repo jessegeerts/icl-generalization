@@ -45,7 +45,7 @@ class MaskedCausalAttention(nn.Module):
             if layer.bias is not None:
                 nn.init.constant_(layer.bias, 0)
 
-    def forward(self, x, save_weights=False):
+    def forward(self, x, save_weights=False, head_mask=None):
         B, T, C = x.shape  # batch size, seq length, h_dim * n_heads
 
         N, D = self.n_heads, C // self.n_heads  # N = num heads, D = attention dim
@@ -64,6 +64,14 @@ class MaskedCausalAttention(nn.Module):
 
         # attention (B, N, T, D)
         attention = self.att_drop(normalized_weights @ v)  # multiply weights by values and apply dropout
+
+        if head_mask is not None:
+            # Convert head_mask to proper tensor shape for broadcasting
+            mask_tensor = torch.tensor(head_mask, device=attention.device)
+            # Reshape to [1, N, 1, 1] for broadcasting across batch and sequence dimensions
+            mask_tensor = mask_tensor.view(1, N, 1, 1)
+            # Apply mask (multiply by 0 or 1)
+            attention = attention * mask_tensor
 
         # gather heads and project (B, N, T, D) -> (B, T, N*D)
         attention = attention.transpose(1, 2).contiguous().view(B, T, N * D)
@@ -108,10 +116,10 @@ class Block(nn.Module):
         self.ln1 = nn.LayerNorm(h_dim)
         self.ln2 = nn.LayerNorm(h_dim)
 
-    def forward(self, x, index=None, save_weights=False):
+    def forward(self, x, index=None, save_weights=False, head_mask=None):
         out_dict = {}
         # Attention -> LayerNorm -> MLP -> LayerNorm
-        attention, weights = self.attention(x, save_weights=save_weights)
+        attention, weights = self.attention(x, save_weights=save_weights, head_mask=head_mask)
         if save_weights:
             out_dict['weights'] = weights
         x = x + attention  # residual
@@ -161,7 +169,7 @@ class Transformer(nn.Module):
         self.ln = nn.LayerNorm(h_dim)
         self.proj_head = nn.Linear(h_dim, out_dim)
 
-    def forward(self, x, save_weights=False):
+    def forward(self, x, save_weights=False, head_mask=None):
         out_dict = {}
         # embed inputs, if required
         if self.input_embedder is None:
@@ -170,7 +178,7 @@ class Transformer(nn.Module):
             h = self.input_embedder(x)
         # pass through the transformer layers
         for index, block in enumerate(self.blocks):
-            h, out = block(h, index=index, save_weights=save_weights)
+            h, out = block(h, index=index, save_weights=save_weights, head_mask=head_mask)
             if save_weights:
                 out_dict[f'block_{index}'] = out
         # finally, predict the logits
