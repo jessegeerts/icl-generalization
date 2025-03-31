@@ -7,6 +7,7 @@ import time
 import argparse
 import seaborn as sns
 import matplotlib.pyplot as plt
+import os
 
 from reddy_replication_torch.config import config
 from reddy_replication_torch.model import Transformer
@@ -142,16 +143,15 @@ def main(config):
         wandb.init(project="reddy-replication", name=experiment_name, config=config)
     # Loading datasets
 
-    mus_label, mus_class, labels_class = get_mus_label_class(K, L, D)
+    mus_label, mus_class, labels_class = get_mus_label_class(K, L, D, seed=0)
     if config.seq.train_type == 'cat':
         test_inputs, test_labels = generate_input_seqs(mus_label, mus_class, labels_class, S, N, Nmax, eps=eps,
                                                           P=p_class,
                                                           B=B,
                                                           p_B=pB, p_C=pC, no_repeats=no_repeats)
     else:
-        test_inputs, test_labels = generate_input_seqs_TI(mus_label, mus_class, labels_class, S, N, Nmax, eps=eps, P=p_class,
-                                                       B=B,
-                                                       p_B=pB, p_C=pC, no_repeats=no_repeats)
+        test_inputs, test_labels = generate_input_seqs_TI(mus_label, mus_class, labels_class, S, N, Nmax, eps=eps,
+                                                          P=p_class, B=B, p_B=pB, p_C=pC, no_repeats=no_repeats)
     test_inputs_TI, test_labels_TI = generate_input_seqs_TI(mus_label, mus_class, labels_class, S, N, Nmax, eps=eps,
                                                        B=B, p_B=pB, p_C=pC, no_repeats=no_repeats)
     test_inputs_ic, test_labels_ic = generate_input_seqs(mus_label, mus_class, labels_class, S, N, Nmax, eps=eps,
@@ -223,10 +223,10 @@ def main(config):
                     wandb.log({'test_accuracy': test_accuracy.item(), 'iter': n})
                     if config.save_weights:
                         fig1, ax1 = plt.subplots()
-                        ax1.imshow(out_dict['block_0']['weights'].cpu().mean(axis=0).squeeze(), cmap=ATTENTION_CMAP)
+                        ax1.imshow(out_dict['block_0']['weights'].cpu().mean(axis=0)[0], cmap=ATTENTION_CMAP)
                         wandb.log({'l0_attn_map_test': fig1, 'iter': n})  # note: now we're logging the mean of the attention weights across data points
                         fig2, ax2 = plt.subplots()
-                        ax2.imshow(out_dict['block_1']['weights'].cpu().mean(axis=0).squeeze(), cmap=ATTENTION_CMAP)
+                        ax2.imshow(out_dict['block_1']['weights'].cpu().mean(axis=0)[0], cmap=ATTENTION_CMAP)
                         wandb.log({'l1_attn_map_test': fig2, 'iter': n})
                         plt.close('all')
 
@@ -237,10 +237,10 @@ def main(config):
                     wandb.log({'icl_accuracy': icl_accuracy.item(), 'iter': n})
                     if config.save_weights:
                         fig1, ax1 = plt.subplots()
-                        ax1.imshow(out_dict['block_0']['weights'].cpu().mean(axis=0).squeeze(), cmap=ATTENTION_CMAP)
+                        ax1.imshow(out_dict['block_0']['weights'].cpu().mean(axis=0)[0], cmap=ATTENTION_CMAP)
                         wandb.log({'l0_attn_map_icl': fig1, 'iter': n})  # note: now we're logging the mean of the attention weights across data points
                         fig2, ax2 = plt.subplots()
-                        ax2.imshow(out_dict['block_1']['weights'].cpu().mean(axis=0).squeeze(), cmap=ATTENTION_CMAP)
+                        ax2.imshow(out_dict['block_1']['weights'].cpu().mean(axis=0)[0], cmap=ATTENTION_CMAP)
                         wandb.log({'l1_attn_map_icl': fig2, 'iter': n})
                         plt.close('all')
 
@@ -273,6 +273,13 @@ def main(config):
 
                 print(f'iter {n}, loss: {loss}, ic_accuracy: {icl_accuracy}, iw_accuracy: {iwl_accuracy}',
                       'ti_accuracy:', ti_accuracy.item())
+
+        if config.save_model and n % config.saving_interval == 0 and n > 0:
+            if not os.path.exists(config.model_dir):
+                os.makedirs(config.model_dir)
+            file_path = os.path.join(config.model_dir, experiment_name)
+            torch.save(model.state_dict(), f'{file_path}_i{n}.pt')
+            print(f"Model saved at {file_path}_i{n}.pt")
 
 
 def calculate_induction_strength(cfg, holdout_batch, n, out_dict_eval):

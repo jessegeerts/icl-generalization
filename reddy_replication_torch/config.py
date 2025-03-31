@@ -4,7 +4,7 @@ from utils import dotdict as dd
 config = dd(dict(
     model=dd(dict(
         h_dim=128,                      # hidden dimensionality of the transformer model
-        n_heads=1,
+        n_heads=8,
         n_blocks=2,
         include_mlp=[False, True],
         activation='relu',              # activation fn for the MLP
@@ -12,7 +12,7 @@ config = dd(dict(
         apply_ln=False,
         widening_factor=1,              # how much wider is the MLP hidden dim
         max_T=64,                       # max sequence length for the model
-        out_dim=None,                    # note this is set later (dependent on N labels in data)
+        out_dim=None,                   # note this is set later (dependent on N labels in data)
         drop_p=0.0
     )),
     data=dd(dict(
@@ -38,10 +38,13 @@ config = dd(dict(
         learning_rate=.01,          # learning rate for SGD
         learning_rate_adam=1e-3,    # learning rate for Adam
         w_decay=1e-7,               # L2 regularisation parameter. note the torch implementation is a bit different from reddy jax code (it's multiplied by LR, so divide by LR to get desired w_decay param )
-        niters=150000*2,
+        niters=4000*10,
         optim='adam'                # 'adam' or 'sgd'
     )),
     log_to_wandb=True,
     logging_interval=500,  # iterations
     save_weights=True,
+    save_model=True,
+    saving_interval=4000,
+    model_dir='models/icl',
 ))
