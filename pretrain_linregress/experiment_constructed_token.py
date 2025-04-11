@@ -166,7 +166,7 @@ def main(config):
     test_inputs_TI, test_labels_TI = None, None
 
     # cast to torch tensor
-    test_inputs = torch.from_numpy(np.array(test_inputs)).float()
+    test_inputs = torch.from_numpy(np.array(test_inputs)).float().to(device)
     test_labels = torch.from_numpy(np.array(test_labels)).to(device)
 
     # test_inputs = append_posemb_to_inputs(test_inputs, config).to(device)
