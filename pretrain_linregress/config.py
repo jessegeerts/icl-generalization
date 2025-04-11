@@ -3,10 +3,10 @@ from utils import dotdict as dd
 
 config = dd(dict(
     model=dd(dict(
-        h_dim=128,                      # hidden dimensionality of the transformer model
-        n_heads=2,
-        n_blocks=2,
-        include_mlp=[False] * 2,
+        h_dim=11,                      # hidden dimensionality of the transformer model
+        n_heads=1,
+        n_blocks=1,
+        include_mlp=[False] * 1,
         activation='relu',              # activation fn for the MLP
         n_mlp_layers=None,              # TODO: make this mutable
         apply_ln=False,
@@ -14,15 +14,15 @@ config = dd(dict(
         max_T=64,                       # max sequence length for the model
         out_dim=None,                   # note this is set later (dependent on N labels in data)
         drop_p=0.0,
-        softmax_attn=[True, False],              # use softmax attention
-        w_init_scale=0.002 / 2,
+        softmax_attn=[False, False],              # use softmax attention
+        w_init_scale=0.002 / 1,
         include_query=False,             # include query in the input
     )),
     data=dd(dict(
         S=10000,
         K=2**10,                 # number of classes
         L=32,                   # number of labels
-        D=63,                   # dimension of inputs
+        D=10,                   # dimension of inputs
         alpha=0.,               # zipf exponent
         eps=0,                # within-class variance (higher => more ICL)
     )),
