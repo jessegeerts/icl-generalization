@@ -14,7 +14,7 @@ config = dd(dict(
         max_T=64,                       # max sequence length for the model
         out_dim=None,                   # note this is set later (dependent on N labels in data)
         drop_p=0.0,
-        softmax_attn=[False, False],              # use softmax attention
+        softmax_attn=[False],              # use softmax attention
         w_init_scale=0.002 / 1,
         include_query=False,             # include query in the input
     )),
