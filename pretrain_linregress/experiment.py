@@ -201,11 +201,11 @@ def main(config):
         optimizer.zero_grad()
         # forward_pass_start = time.time()
         y_hat, out_dict = model(inputs_batch)
-
+        # y_hat = y_hat[:, 2 * config.seq.Nmax + 1] * (-1.)
         # optimizer_start = time.time()
-        y_hat = y_hat.view(-1, config.model.out_dim)
         labels_batch = labels_batch[:, -1]
-        loss = criterion(y_hat.squeeze(), labels_batch)
+        # loss = criterion(y_hat.squeeze(), labels_batch)
+        loss = 0.5 * torch.sum((labels_batch - y_hat.squeeze()) ** 2) / labels_batch.shape[0]
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), config.train.grad_clip_value)
         optimizer.step()

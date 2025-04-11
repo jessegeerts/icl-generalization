@@ -16,7 +16,7 @@ config = dd(dict(
         drop_p=0.0,
         softmax_attn=[True, False],              # use softmax attention
         w_init_scale=0.002 / 2,
-        include_query=True,             # include query in the input
+        include_query=False,             # include query in the input
     )),
     data=dd(dict(
         S=10000,
