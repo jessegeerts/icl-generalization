@@ -196,7 +196,7 @@ def main(config):
         inputs_batch = torch.from_numpy(np.array(inputs_batch)).float().to(device)
         labels_batch = torch.from_numpy(np.array(labels_batch)).to(device)
 
-        inputs_batch = append_posemb_to_inputs(inputs_batch, config)
+        inputs_batch = append_posemb_to_inputs(inputs_batch, config).to(device)
 
         optimizer.zero_grad()
         # forward_pass_start = time.time()
