@@ -25,16 +25,20 @@ from jax import random
 #The input dimension is 2*N + 1 + D
 
 
-def get_mus_label_class(K,L,D):
+def get_mus_label_class(K,L,D, seed=None):
 
-    mus_label = np.random.normal(size = (L,D))/np.sqrt(D)  # why is mus_label L by D?
+    if seed is not None:
+        np.random.seed(seed)
+
+    mus_label = np.random.normal(size = (L,D))/np.sqrt(D)
     mus_class = np.random.normal(size = (K,D))/np.sqrt(D)
     if K < L or K%L != 0:
         print("K > L and K%L == 0 is required")
         return 0
-    labels_class =  np.tile(np.arange(L),int(K/L))
+    labels_class = np.tile(np.arange(L),int(K/L))
 
     return mus_label, mus_class, labels_class
+
 
 def generate_targets_only(mus_label, mus_class, labels_class,S, eps= 0.1, P = None):
     e_fac = 1/np.sqrt(1+eps**2)
