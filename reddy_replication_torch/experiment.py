@@ -86,6 +86,12 @@ def set_config(config):
 
 
 def main(config):
+
+    # set random seed
+    seed = config.seed
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
     if torch.cuda.is_available():
         device = torch.device('cuda')
     else:

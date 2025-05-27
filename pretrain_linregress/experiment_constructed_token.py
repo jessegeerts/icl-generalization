@@ -183,6 +183,7 @@ def main(config):
     else:
         optimizer = optim.SGD(model.parameters(), lr=config.train.learning_rate, weight_decay=config.train.w_decay)
     criterion = nn.MSELoss()
+    losses = []
     # training loop
     for n in range(config.train.niters):
         model.train()
@@ -206,12 +207,11 @@ def main(config):
         # optimizer_start = time.time()
         y_hat = y_hat[:, -1] * (-1.)
         labels_batch = labels_batch[:, -1]
-        # loss = criterion(y_hat.squeeze(), labels_batch)
-        loss = 0.5 * torch.sum((labels_batch - y_hat.squeeze()) ** 2) / labels_batch.shape[0]
+        loss = criterion(y_hat.squeeze(), labels_batch)
+        # loss = 0.5 * torch.sum((labels_batch - y_hat.squeeze()) ** 2) / labels_batch.shape[0]
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), config.train.grad_clip_value)
         optimizer.step()
-
         # evaluate on ICL, IWL etc
         if n % config.logging_interval == 0:
             model.eval()
@@ -248,11 +248,11 @@ def main(config):
                 #         plt.close('all')
 
                 # calculate induction strength
-                # induction_strength_per_head = calculate_induction_strength(config, test_inputs, n, out_dict)
-                # if config.log_to_wandb:
-                #     for h in range(config.model.n_heads):
-                #         induction_strength = induction_strength_per_head[h]
-                #         wandb.log({f'induction_strength_icl_head_{h}': induction_strength, 'iter': n})
+                induction_strength_per_head = calculate_induction_strength(config, test_inputs, n, out_dict)
+                if config.log_to_wandb:
+                    for h in range(config.model.n_heads):
+                        induction_strength = induction_strength_per_head[h]
+                        wandb.log({f'induction_strength_icl_head_{h}': induction_strength, 'iter': n})
 
 
                 # # evaluate on IWL
@@ -277,13 +277,15 @@ def main(config):
                 # print(f'iter {n}, loss: {loss}, ic_accuracy: {icl_accuracy}, iw_accuracy: {iwl_accuracy}',
                 #       'ti_accuracy:', ti_accuracy.item())
                 print(f'iter {n}, loss: {loss}, test_loss: {test_loss}')
-
+                losses.append(test_loss.item())
         if config.save_model and n % config.saving_interval == 0 and n > 0:
             if not os.path.exists(config.model_dir):
                 os.makedirs(config.model_dir)
             file_path = os.path.join(config.model_dir, experiment_name)
             torch.save(model.state_dict(), f'{file_path}_i{n}.pt')
             print(f"Model saved at {file_path}_i{n}.pt")
+    plt.plot(losses)
+    plt.show()
 
 
 def calculate_induction_strength(cfg, holdout_batch, n, out_dict_eval):

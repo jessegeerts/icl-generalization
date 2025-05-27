@@ -206,10 +206,7 @@ class Transformer(nn.Module):
         self.ln = nn.LayerNorm(h_dim)
         self.proj_head = nn.Linear(h_dim, out_dim)
         # position embedding
-        if pos_embed_type == 'parity':
-            self.positional_embedding = get_parity_embeddings(max_T, emb_dim)
-        else:
-            self.positional_embedding = get_sinusoidal_positional_embeddings_2(max_T, emb_dim)
+        self.positional_embedding = get_sinusoidal_positional_embeddings_2(max_T, emb_dim)
         self.pos_emb_loc = pos_emb_loc  # add or append to token embeddings
 
     def forward(self, x, save_weights=False, save_hidden_activations=False, apply_embedder=True):

@@ -197,7 +197,7 @@ class Transformer(nn.Module):
         self.ln = nn.LayerNorm(h_dim)
         self.proj_head = nn.Linear(h_dim, out_dim)
 
-    def forward(self, x, save_weights=False, head_mask=None, include_query=True):
+    def forward(self, x, save_weights=False, head_mask=None, include_query=True, save_hiddens=True):
         out_dict = {}
         # embed inputs, if required
         if self.input_embedder is None:
@@ -209,6 +209,8 @@ class Transformer(nn.Module):
             h, out = block(h, index=index, save_weights=save_weights, head_mask=head_mask, include_query=include_query)
             if save_weights:
                 out_dict[f'block_{index}'] = out
+            if save_hiddens:
+                out_dict[f'hidden_activations_{index}'] = h.detach()
         # finally, predict the logits
         pred = self.proj_head(h)
 

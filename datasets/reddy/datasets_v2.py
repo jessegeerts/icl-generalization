@@ -178,6 +178,8 @@ def generate_input_seqs_TI(mus_label, mus_class, labels_class, S, N, Nmax, eps=0
 
     if query_pos is None:
         random_query = True
+    else:
+        random_query = False
 
     e_fac = 1 / np.sqrt(1 + eps ** 2)
 

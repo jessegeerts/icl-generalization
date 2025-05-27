@@ -115,7 +115,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
     for n in range(cfg.train.niters):
         model.train()
         num_items = torch.randint(4, 9, (1,)).item()  # vary number of items (for IC sequences)
-        batch = train_generator(num_items=num_items)
+        batch = train_generator(num_context_items=num_items)
         batch = {k: v.to(device) for k, v in batch.items()}
         optimizer.zero_grad()
 
@@ -145,7 +145,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
 
             # evaluate model on holdout set (same distribution as training set)
             model.eval()
-            holdout_batch = train_generator(num_items=num_items)
+            holdout_batch = train_generator(num_context_items=num_items)
             holdout_batch = {k: v.to(device) for k, v in holdout_batch.items()}
 
             y_hat, out_dict = model(holdout_batch['example'],
@@ -169,7 +169,8 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
             if cfg.eval_at_all_distances:
                 correct_matrix, holdout_batch, pred_matrix, ranks = eval_at_all_distances(cfg, device, model, n,
                                                                                           leave_one_out=cfg.seq.leave_one_out,
-                                                                                          items=fixed_items)
+                                                                                          items=fixed_items,
+                                                                                          get_hiddens=False)
 
                 plot_and_log_matrix(cfg, correct_matrix, n, ranks, ranks, 'hot', 0, 1, 'Correct Matrix')
                 plot_and_log_matrix(cfg, pred_matrix, n, ranks, ranks, 'coolwarm', -1, 1, 'Pred Matrix')
@@ -178,6 +179,10 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
                 steps_above_criterion += 1
             else:
                 steps_above_criterion = 0
+
+            metrics['holdout_accuracy'].append(holdout_accuracy)
+            metrics['loss'].append(loss.item())
+
             if steps_above_criterion > cfg.train.steps_above_criterion:
                 print(f'holdout accuracy maximal for {steps_above_criterion} successive evaluations, stopping training')
                 break
@@ -186,6 +191,7 @@ def main(config=default_config, wandb_proj='ic_transinf_sweep', seed=42):
             model_path = os.path.join(checkpoint_folder, f"model_{n}.pt")
             print(f"Saving model to {model_path}")
             torch.save(model.state_dict(), model_path)
+            metrics['model_path'] = model_path
             # also save config as yaml
             config_path = os.path.join(checkpoint_folder, 'config.yaml')
             with open(config_path, 'w') as f:
@@ -273,4 +279,8 @@ def eval_loss_and_accuracy(mod, inputs, labels, criterion, config):
 
 
 if __name__ == '__main__':
-    main(wandb_proj='in-context-concat')
+    import matplotlib.pyplot as plt
+
+    metrics = main(wandb_proj='in-context-concat')
+    plt.plot(metrics['loss'])
+    plt.plot(metrics['holdout_accuracy'])
