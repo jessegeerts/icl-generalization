@@ -256,7 +256,33 @@ def main_curriculum():
 
     mus_label, mus_class, labels_class = get_mus_label_class(K, L, D, seed=0)
 
-    # Test sets
+    # Test sets for all possible query pairs
+    test_inputs_by_pair = {}
+    test_labels_by_pair = {}
+
+    n_items = 7
+    for pos1 in range(n_items):
+        for pos2 in range(n_items):
+            if pos1 == pos2:
+                continue  # Skip same-item pairs
+
+            pair_name = f"{pos1}{pos2}"
+
+            # Create query positions with fixed pair
+            query_pos_fixed = (
+                np.full(S, pos1, dtype=int),
+                np.full(S, pos2, dtype=int)
+            )
+
+            test_inputs_pair, test_labels_pair = generate_input_seqs_TI_fixed(
+                mus_label, mus_class, labels_class, S, N, Nmax,
+                eps=eps, B=B, p_B=pB, p_C=pC, no_repeats=no_repeats,
+                query_pos=query_pos_fixed
+            )
+            test_inputs_by_pair[pair_name] = torch.from_numpy(np.array(test_inputs_pair)).float().to(device)
+            test_labels_by_pair[pair_name] = torch.from_numpy(np.array(test_labels_pair)).to(device)
+
+    # Original test sets
     test_inputs_TI, test_labels_TI = generate_input_seqs_TI(
         mus_label, mus_class, labels_class, S, N, Nmax,
         eps=eps, B=B, p_B=pB, p_C=pC, no_repeats=no_repeats
@@ -332,6 +358,38 @@ def main_curriculum():
                 if cfg.log_to_wandb:
                     wandb.log({'train_loss': loss.item(), 'iter': n, 'p_ti': p_ti})
 
+                # Evaluate on each query pair
+                pair_accuracies = {}
+                for pos1 in range(7):
+                    for pos2 in range(7):
+                        if pos1 == pos2:
+                            continue
+                        pair_name = f"{pos1}{pos2}"
+                        pair_loss, pair_accuracy, _ = eval_loss_and_accuracy(
+                            model, test_inputs_by_pair[pair_name],
+                            test_labels_by_pair[pair_name], criterion, save_weights=False
+                        )
+                        pair_accuracies[pair_name] = pair_accuracy.item()
+                        if cfg.log_to_wandb:
+                            wandb.log({f'ti_accuracy_pair_{pair_name}': pair_accuracy.item(), 'iter': n})
+
+                # Compute distance-based aggregates for summary
+                distance_accuracies = {d: [] for d in range(1, 7)}
+                for pos1 in range(7):
+                    for pos2 in range(7):
+                        if pos1 == pos2:
+                            continue
+                        distance = abs(pos2 - pos1)
+                        pair_name = f"{pos1}{pos2}"
+                        distance_accuracies[distance].append(pair_accuracies[pair_name])
+
+                # Average per distance
+                avg_distance_accuracies = {d: np.mean(accs) for d, accs in distance_accuracies.items()}
+                if cfg.log_to_wandb:
+                    for distance, avg_acc in avg_distance_accuracies.items():
+                        wandb.log({f'ti_accuracy_dist_{distance}_avg': avg_acc, 'iter': n})
+
+                # Original evaluations
                 ti_loss, ti_accuracy, out_dict_TI = eval_loss_and_accuracy(
                     model, test_inputs_TI, test_labels_TI, criterion, save_weights=cfg.save_weights
                 )
@@ -350,8 +408,16 @@ def main_curriculum():
                         'iter': n
                     })
 
+                # Print with distance breakdown
+                dist_str = ', '.join([f'd{d}:{avg_distance_accuracies[d]:.3f}' for d in range(1, 7)])
                 print(f'iter {n}, p_ti: {p_ti:.2f}, loss: {loss.item():.4f}, '
                       f'ti: {ti_accuracy.item():.4f}, ic: {icl_accuracy.item():.4f}, iw: {iwl_accuracy.item():.4f}')
+                print(f'  avg by distance: {dist_str}')
+
+                # Optionally print a few specific pairs
+                if n % (cfg.logging_interval * 10) == 0:  # Less frequent detailed output
+                    print(f'  sample pairs: 01:{pair_accuracies["01"]:.3f}, 06:{pair_accuracies["06"]:.3f}, '
+                          f'12:{pair_accuracies["12"]:.3f}, 36:{pair_accuracies["36"]:.3f}')
 
     if cfg.log_to_wandb:
         wandb.finish()
