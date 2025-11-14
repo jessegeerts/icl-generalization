@@ -12,6 +12,7 @@ from reddy_replication_torch.inbuilt_model import TorchTransformer
 from datasets.reddy.datasets_v2 import *
 from definitions import WANDB_KEY, ATTENTION_CMAP
 from utils import dotdict as dd
+from plotting_utils import TI_per_pair_plot
 
 
 def generate_input_seqs_TI_fixed(mus_label, mus_class, labels_class, S, N, Nmax, eps=0.1, B=0, p_B=0, P=None, p_C=0,
@@ -20,9 +21,9 @@ def generate_input_seqs_TI_fixed(mus_label, mus_class, labels_class, S, N, Nmax,
     """Fixed version of generate_input_seqs_TI that handles query_pos correctly."""
 
     if query_pos is None:
-        random_query = True
+        random_query_from_context = True
     else:
-        random_query = False
+        random_query_from_context = False
 
     e_fac = 1 / np.sqrt(1 + eps ** 2)
 
@@ -60,7 +61,7 @@ def generate_input_seqs_TI_fixed(mus_label, mus_class, labels_class, S, N, Nmax,
     item_2_choices_c = item_2_choices_c[np.arange(S)[:, None], random_ordering]
     label_choices_c = converted_label_choices_c[np.arange(S)[:, None], random_ordering]
 
-    if random_query:
+    if random_query_from_context:
         targets_c_ind = np.random.choice(item_1_choices_c.shape[1], size=(item_1_choices_c.shape[0],))
         targets_c_1 = item_1_choices_c[np.arange(item_1_choices_c.shape[0]), targets_c_ind]
         targets_c_2 = item_2_choices_c[np.arange(item_1_choices_c.shape[0]), targets_c_ind]
@@ -95,7 +96,7 @@ def generate_input_seqs_TI_fixed(mus_label, mus_class, labels_class, S, N, Nmax,
 
     for s in range(S):
         if not filt_C[s]:
-            if random_query:
+            if random_query_from_context:
                 labels[s, label_choices_c[s, targets_c_ind[s]]] = True
             else:
                 pos1, pos2 = query_pos[0][s], query_pos[1][s]
@@ -126,7 +127,7 @@ def sample_query_positions_by_distance(batch_size, n_items=7):
         pos1[i] = np.random.randint(0, n_items)
         pos2[i] = np.random.choice([j for j in range(n_items) if j != pos1[i]])
 
-    return (pos1, pos2)
+    return pos1, pos2
 
 
 def eval_loss_and_accuracy(mod, inputs, labels, criterion, save_weights=False):
@@ -182,6 +183,7 @@ def parse_args():
     parser.add_argument("--curriculum_warmup", type=int, default=20000, help="Pure ICL iterations")
     parser.add_argument("--curriculum_transition", type=int, default=40000, help="End of transition period")
     parser.add_argument("--w_decay", type=float, default=1e-7, help="Weight decay")
+    parser.add_argument("--include_distal_queries", action="store_true", help="Include distal queries during TI training")
 
     # Data
     parser.add_argument("--eps", type=float, default=0.0, help="Within-class variance")
@@ -247,7 +249,7 @@ def main_curriculum():
             pC=1.,
             shuf=True,
             train_type='curriculum',
-            no_repeats=False
+            no_repeats=False,
         )),
         train=dd(dict(
             batch_size=args.batch_size,
@@ -258,6 +260,7 @@ def main_curriculum():
             optim='adam',
             curriculum_warmup=args.curriculum_warmup,
             curriculum_transition=args.curriculum_transition,
+            include_distal_queries=args.include_distal_queries
         )),
         log_to_wandb=not args.no_wandb,
         logging_interval=args.logging_interval,
@@ -385,7 +388,11 @@ def main_curriculum():
 
         if np.random.rand() < p_ti:
             # TI training with varied distances
-            query_positions = sample_query_positions_by_distance(cfg.train.batch_size, n_items=7)
+            if cfg.train.include_distal_queries:
+                # for now, equal sampling of query distances
+                query_positions = sample_query_positions_by_distance(cfg.train.batch_size, n_items=7)
+            else:
+                query_positions = None
             inputs_batch, labels_batch, target_classes = generate_input_seqs_TI_fixed(
                 mus_label, mus_class, labels_class,
                 cfg.train.batch_size, N, Nmax,
@@ -431,6 +438,24 @@ def main_curriculum():
                         pair_accuracies[pair_name] = pair_accuracy.item()
                         if cfg.log_to_wandb:
                             wandb.log({f'ti_accuracy_pair_{pair_name}': pair_accuracy.item(), 'iter': n})
+
+                # put these in a matrix pred_matrix for visualization
+                pred_matrix = np.zeros((7, 7))
+                for pos1 in range(7):
+                    for pos2 in range(7):
+                        if pos1 == pos2:
+                            pred_matrix[pos1, pos2] = np.nan
+                        else:
+                            pair_name = f"{pos1}{pos2}"
+                            pred_matrix[pos1, pos2] = pair_accuracies[pair_name]
+
+                # Visualize prediction accuracy matrix with TI_per_pair_plot
+                fig, ax = plt.subplots(figsize=(6, 5))
+                TI_per_pair_plot(pred_matrix, ax)
+                ax.set_title(f'Test Accuracy by Query Pair at Iter {n}')
+                if cfg.log_to_wandb:
+                    wandb.log({"ti_accuracy_pair_plot": wandb.Image(fig), 'iter': n})
+                plt.close(fig)
 
                 # Compute distance-based aggregates for summary
                 distance_accuracies = {d: [] for d in range(1, 7)}
