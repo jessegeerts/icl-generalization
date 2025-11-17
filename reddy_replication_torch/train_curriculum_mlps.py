@@ -266,6 +266,7 @@ def main_curriculum():
         logging_interval=args.logging_interval,
         save_weights=args.save_weights,
         save_model=False,
+        save_figs=True,
         saving_interval=4000,
         model_dir='models/icl',
         seed=args.seed,
