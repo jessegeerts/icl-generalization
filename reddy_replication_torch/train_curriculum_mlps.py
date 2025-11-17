@@ -455,6 +455,12 @@ def main_curriculum():
                 ax.set_title(f'Test Accuracy by Query Pair at Iter {n}')
                 if cfg.log_to_wandb:
                     wandb.log({"ti_accuracy_pair_plot": wandb.Image(fig), 'iter': n})
+                # save to disk
+                if cfg.save_figs:
+                    fig_dir = os.path.join('figures', 'reddy_replication', experiment_name)
+                    os.makedirs(fig_dir, exist_ok=True)
+                    fig_path = os.path.join(fig_dir, f'ti_accuracy_pair_plot_iter_{n}.png')
+                    fig.savefig(fig_path)
                 plt.close(fig)
 
                 # Compute distance-based aggregates for summary
