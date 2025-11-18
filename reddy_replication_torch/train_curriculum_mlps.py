@@ -274,10 +274,12 @@ def main_curriculum():
 
     # Create experiment name
     mlp_str = 'mlp_' + ''.join([str(i) for i, x in enumerate(include_mlp) if x]) if any(include_mlp) else 'nomlp'
+    include_distal_str = 'distal' if args.include_distal_queries else 'nodistal'
     if args.exp_name is not None:
         experiment_name = args.exp_name
     else:
-        experiment_name = 'TI_curriculum_bl{}_{}_{}_warmup{}_trans{}_lr{}_eps{}'.format(
+        experiment_name = 'TI_curriculum_{}_bl{}_{}_{}_warmup{}_trans{}_lr{}_eps{}'.format(
+            include_distal_str,
             args.n_blocks,
             mlp_str,
             'ln' if args.apply_ln else 'noln',
@@ -461,7 +463,7 @@ def main_curriculum():
                 if cfg.save_figs:
                     fig_dir = os.path.join('figures', 'reddy_replication', experiment_name)
                     os.makedirs(fig_dir, exist_ok=True)
-                    fig_path = os.path.join(fig_dir, f'ti_accuracy_pair_plot_iter_{n}.png')
+                    fig_path = os.path.join(fig_dir, f'ti_accuracy_pair_plot_iter_{n}.pdf')
                     fig.savefig(fig_path)
                 plt.close(fig)
 
