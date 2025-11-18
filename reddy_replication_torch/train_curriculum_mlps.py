@@ -453,6 +453,7 @@ def main_curriculum():
                 # Visualize prediction accuracy matrix with TI_per_pair_plot
                 fig, ax = plt.subplots(figsize=(6, 5))
                 TI_per_pair_plot(pred_matrix, ax)
+                ax.set_ylabel('Accuracy')
                 ax.set_title(f'Test Accuracy by Query Pair at Iter {n}')
                 if cfg.log_to_wandb:
                     wandb.log({"ti_accuracy_pair_plot": wandb.Image(fig), 'iter': n})
